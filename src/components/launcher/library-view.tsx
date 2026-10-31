@@ -7,6 +7,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { InstanceCard } from "@/components/launcher/cards"
+import { useElyHost } from "@/components/launcher/ely-host"
 import { countLabel } from "@/lib/format"
 import { LOADER_LABEL } from "@/lib/labels"
 import { useLauncher } from "@/lib/launcher-context"
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils"
 
 export function LibraryView({ onPlay, onCreate }: { onPlay: (id: string) => void; onCreate: () => void }) {
   const { state, dispatch, query } = useLauncher()
+  const host = useElyHost()
   const { theme, library } = state
   const needle = query.trim().toLowerCase()
   const filtered = library.instances.filter((instance) => {
@@ -114,9 +116,7 @@ export function LibraryView({ onPlay, onCreate }: { onPlay: (id: string) => void
           </Alert>
           <Alert>
             <AlertTitle>ElyPrism не найден</AlertTitle>
-            <AlertDescription>
-              Папка сборок на этом компьютере не прочиталась. Кнопка «Играть» запустит Minecraft, когда UltraPrism увидит установленный ElyPrism.
-            </AlertDescription>
+            <AlertDescription>{host.error || host.status?.message || "Папка сборок на этом компьютере не прочиталась."}</AlertDescription>
           </Alert>
         </aside>
       )}

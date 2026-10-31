@@ -102,7 +102,21 @@ async function listWindowsUsers(): Promise<string[]> {
 
 function runtimeEnv(passed?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const live = globalThis.process ? globalThis.process["env"] : {}
-  return { ...live, ...(passed ?? {}) }
+  return { ...live, ...directEnv(), ...(passed ?? {}) }
+}
+
+function directEnv(): NodeJS.ProcessEnv {
+  return {
+    ULTRAPRISM_ELY_DIR: process.env.ULTRAPRISM_ELY_DIR,
+    ULTRAPRISM_ELY_EXE: process.env.ULTRAPRISM_ELY_EXE,
+    ELYPRISMLAUNCHER_DATA_DIR: process.env.ELYPRISMLAUNCHER_DATA_DIR,
+    PINECONEMC_DATA_DIR: process.env.PINECONEMC_DATA_DIR,
+    APPDATA: process.env.APPDATA,
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
+    USERPROFILE: process.env.USERPROFILE,
+    HOME: process.env.HOME,
+    ProgramFiles: process.env.ProgramFiles,
+  }
 }
 
 function envPick(env: NodeJS.ProcessEnv, key: string): string | undefined {
@@ -110,38 +124,67 @@ function envPick(env: NodeJS.ProcessEnv, key: string): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
 }
 
-async function findDataDir(env: NodeJS.ProcessEnv): Promise<string | null> {
-  const merged = runtimeEnv(env)
-  const candidates: string[] = []
-  for (const key of ["ULTRAPRISM_ELY_DIR", "ELYPRISMLAUNCHER_DATA_DIR", "PINECONEMC_DATA_DIR"]) {
-    const value = envPick(merged, key)
-    if (value) candidates.push(value)
-  }
-  const appData = envPick(merged, "APPDATA")
-  if (appData) candidates.push(path.join(appData, "ElyPrismLauncher"))
-  if (process.platform === "win32") {
-    candidates.push(path.join(os.homedir(), "AppData", "Roaming", "ElyPrismLauncher"))
-  }
-
+async function locate(candidates: Array<string | undefined>, accept: (dir: string) => Promise<boolean>): Promise<{ path: string | null; tried: string[] }> {
+  const tried: string[] = []
   const seen = new Set<string>()
   for (const candidate of candidates) {
+    if (!candidate?.trim()) continue
     const resolved = path.resolve(candidate)
     if (seen.has(resolved)) continue
     seen.add(resolved)
-    if (await isDataDir(resolved)) return resolved
+    const ok = await accept(resolved).catch(() => false)
+    tried.push(`${resolved}=${ok ? "есть" : "нет"}`)
+    if (ok) return { path: resolved, tried }
+  }
+  return { path: null, tried }
+}
+
+async function roamingFolders(roaming: string): Promise<string[]> {
+  if (!(await exists(roaming))) return []
+  let names: string[] = []
+  try {
+    names = await fs.readdir(roaming)
+  } catch {
+    return []
+  }
+  const found: string[] = []
+  for (const name of names) {
+    const dir = path.join(roaming, name)
+    if (await exists(path.join(dir, "elyprismlauncher.cfg"))) found.push(dir)
+  }
+  return found
+}
+
+async function findDataDir(env: NodeJS.ProcessEnv): Promise<{ path: string | null; tried: string[] }> {
+  const merged = runtimeEnv(env)
+  const homes = [os.homedir(), envPick(merged, "USERPROFILE"), envPick(merged, "HOME")].filter((item): item is string => Boolean(item))
+  const appData = envPick(merged, "APPDATA")
+  const roamings = [
+    appData,
+    ...homes.map((home) => path.join(home, "AppData", "Roaming")),
+  ]
+  const named = ["ElyPrismLauncher", "PrismLauncher", "PineconeMC", "PolyMC", "MultiMC"]
+  const candidates: Array<string | undefined> = [
+    envPick(merged, "ULTRAPRISM_ELY_DIR"),
+    envPick(merged, "ELYPRISMLAUNCHER_DATA_DIR"),
+    envPick(merged, "PINECONEMC_DATA_DIR"),
+  ]
+  for (const roaming of roamings) {
+    if (!roaming) continue
+    for (const name of named) candidates.push(path.join(roaming, name))
+    candidates.push(...(await roamingFolders(roaming)))
   }
 
   for (const user of await listWindowsUsers()) {
     const dir = path.win32.join("C:\\Users", user, "AppData", "Roaming", "ElyPrismLauncher")
     const wsl = toWslPath(dir)
-    if (wsl && (await isDataDir(wsl))) return wsl
+    if (wsl) candidates.push(wsl)
   }
 
-  const home = env.HOME || os.homedir()
-  const xdg = env.XDG_DATA_HOME || path.join(home, ".local", "share")
-  const linux = path.join(xdg, "ElyPrismLauncher")
-  if (await isDataDir(linux)) return linux
-  return null
+  const home = envPick(merged, "HOME") || os.homedir()
+  const xdg = envPick(merged, "XDG_DATA_HOME") || path.join(home, ".local", "share")
+  candidates.push(path.join(xdg, "ElyPrismLauncher"))
+  return locate(candidates, isDataDir)
 }
 
 async function readRegistryInstallDir(): Promise<string | null> {
@@ -365,11 +408,12 @@ function liveSessions(): string[] {
 }
 
 export async function inspectHost(env: NodeJS.ProcessEnv = runtimeEnv()): Promise<ElyHostStatus> {
-  const dataDir = await findDataDir(env)
+  const located = await findDataDir(env)
+  const dataDir = located.path
   const executable = await findExecutable(env)
   if (!dataDir) {
     return emptyStatus(
-      "Папка ElyPrism не найдена. На Windows она лежит в %AppData%\\ElyPrismLauncher. Путь можно задать переменной ULTRAPRISM_ELY_DIR, программу — ULTRAPRISM_ELY_EXE.",
+      `Папка ElyPrism не найдена. Проверено: ${located.tried.join(" | ") || "ни одного пути"}. Система ${process.platform}, домашняя папка ${os.homedir()}.`,
     )
   }
   const instances = await readInstances(dataDir)

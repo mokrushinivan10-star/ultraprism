@@ -293,7 +293,7 @@ export function LauncherApp() {
                     ? "ElyPrism подключён"
                     : host.status?.found
                       ? "Папка ElyPrism найдена"
-                      : "ElyPrism не найден"}
+                      : host.error || "ElyPrism не найден"}
               </span>
               <span>{countLabel(library.worlds.length, "карточка мира", "карточки миров", "карточек миров")} · тема их не пишет</span>
               <span className="truncate">Тема: {theme.name}</span>
