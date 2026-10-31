@@ -1,0 +1,39 @@
+{
+  "nodes": [
+    {"id": "home", "type": "file", "file": "Добро пожаловать.md", "x": 0, "y": 0, "width": 420, "height": 520},
+    {"id": "open", "type": "file", "file": "Как открыть хранилище.md", "x": 520, "y": -560, "width": 380, "height": 280},
+    {"id": "what", "type": "file", "file": "Что такое UltraPrism.md", "x": 520, "y": -220, "width": 380, "height": 360},
+    {"id": "start", "type": "file", "file": "Быстрый старт.md", "x": 520, "y": 200, "width": 380, "height": 420},
+    {"id": "lib", "type": "file", "file": "Интерфейс/Библиотека сборок.md", "x": 1040, "y": -640, "width": 400, "height": 320},
+    {"id": "inst", "type": "file", "file": "Интерфейс/Страница сборки.md", "x": 1040, "y": -280, "width": 400, "height": 300},
+    {"id": "acc", "type": "file", "file": "Интерфейс/Учётные записи.md", "x": 1040, "y": 60, "width": 400, "height": 260},
+    {"id": "worlds", "type": "file", "file": "Интерфейс/Хранилище миров.md", "x": 1040, "y": 360, "width": 400, "height": 280},
+    {"id": "launch", "type": "file", "file": "Запуск.md", "x": 1040, "y": 680, "width": 400, "height": 280},
+    {"id": "studio", "type": "file", "file": "Кастомизация/Студия оформления.md", "x": 1560, "y": -640, "width": 400, "height": 320},
+    {"id": "themes", "type": "file", "file": "Кастомизация/Готовые темы.md", "x": 1560, "y": -280, "width": 400, "height": 280},
+    {"id": "colors", "type": "file", "file": "Кастомизация/Цвета и контраст.md", "x": 1560, "y": 40, "width": 400, "height": 280},
+    {"id": "shape", "type": "file", "file": "Кастомизация/Форма, шрифт и плотность.md", "x": 1560, "y": 360, "width": 400, "height": 280},
+    {"id": "layout", "type": "file", "file": "Кастомизация/Макет.md", "x": 1560, "y": 680, "width": 400, "height": 280},
+    {"id": "safe", "type": "file", "file": "Миры/Почему миры в безопасности.md", "x": 2080, "y": -200, "width": 420, "height": 360},
+    {"id": "faq", "type": "file", "file": "Вопросы и ответы.md", "x": 2080, "y": 220, "width": 420, "height": 320},
+    {"id": "decisions", "type": "file", "file": "Решения этой версии.md", "x": 2080, "y": 580, "width": 420, "height": 320}
+  ],
+  "edges": [
+    {"id": "e1", "fromNode": "home", "fromSide": "right", "toNode": "open", "toSide": "left"},
+    {"id": "e2", "fromNode": "home", "fromSide": "right", "toNode": "what", "toSide": "left"},
+    {"id": "e3", "fromNode": "home", "fromSide": "right", "toNode": "start", "toSide": "left"},
+    {"id": "e4", "fromNode": "start", "fromSide": "right", "toNode": "lib", "toSide": "left"},
+    {"id": "e5", "fromNode": "start", "fromSide": "right", "toNode": "inst", "toSide": "left"},
+    {"id": "e6", "fromNode": "start", "fromSide": "right", "toNode": "acc", "toSide": "left"},
+    {"id": "e7", "fromNode": "start", "fromSide": "right", "toNode": "worlds", "toSide": "left"},
+    {"id": "e8", "fromNode": "start", "fromSide": "right", "toNode": "launch", "toSide": "left"},
+    {"id": "e9", "fromNode": "lib", "fromSide": "right", "toNode": "studio", "toSide": "left"},
+    {"id": "e10", "fromNode": "studio", "fromSide": "bottom", "toNode": "themes", "toSide": "top"},
+    {"id": "e11", "fromNode": "themes", "fromSide": "bottom", "toNode": "colors", "toSide": "top"},
+    {"id": "e12", "fromNode": "colors", "fromSide": "bottom", "toNode": "shape", "toSide": "top"},
+    {"id": "e13", "fromNode": "shape", "fromSide": "bottom", "toNode": "layout", "toSide": "top"},
+    {"id": "e14", "fromNode": "worlds", "fromSide": "right", "toNode": "safe", "toSide": "left"},
+    {"id": "e15", "fromNode": "safe", "fromSide": "bottom", "toNode": "faq", "toSide": "top"},
+    {"id": "e16", "fromNode": "faq", "fromSide": "bottom", "toNode": "decisions", "toSide": "top"}
+  ]
+}

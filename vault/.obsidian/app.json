@@ -1,0 +1,12 @@
+{
+  "promptDelete": true,
+  "alwaysUpdateLinks": true,
+  "showInlineTitle": true,
+  "readableLineLength": true,
+  "strictLineBreaks": false,
+  "newFileLocation": "folder",
+  "attachmentFolderPath": "вложения",
+  "useMarkdownLinks": false,
+  "newLinkFormat": "shortest",
+  "showUnsupportedFiles": false
+}
