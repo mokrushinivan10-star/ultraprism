@@ -2,7 +2,17 @@
 
 Это изменённые исходники [ElyPrismLauncher](https://github.com/ElyPrismLauncher/ElyPrismLauncher) (ветка `develop`). Исходники одни и те же для Windows и Linux. При запуске программы окно ElyPrism не показывается: открывается интерфейс UltraPrism на [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
-Файл, собранный на сервере этого проекта, называется `launcher/build/Debug/elyprismlauncher` и запускается только на Linux. На Windows его не открыть и им нельзя заменить установленный ElyPrism. Переходить на Linux не нужно: для Windows нужен свой `elyprismlauncher.exe`, его получают сборкой того же каталога `launcher` на Windows.
+Файл, собранный на сервере этого проекта, называется `launcher/build/Debug/elyprismlauncher` и запускается только на Linux. На Windows его не открыть и им нельзя заменить установленный ElyPrism.
+
+## Одна кнопка на Windows
+
+После того как репозиторий лежит в WSL в папке `~/ultraprism` и установлен Node.js 22, кнопка запуска — файл `UltraPrism.bat`.
+
+1. В проводнике откройте `\\wsl$\Ubuntu\home\<имя>\ultraprism` (вместо Ubuntu может быть другое имя дистрибутива).
+2. Скопируйте `UltraPrism.bat` на рабочий стол.
+3. Дальше каждый запуск — двойной щелчок по этому файлу на рабочем столе. Он поднимает интерфейс и открывает браузер на http://127.0.0.1:43123.
+
+Первый щелчок дольше: ставятся зависимости. Окно Ubuntu при этом открывать не нужно.
 
 Проект не связан с Prism Launcher, Ely.by и Mojang и не одобрен ими. Код лаунчера остаётся под GPL-3.0-only, см. `launcher/COPYING.md`. Ключи Microsoft, Ely.by и CurseForge в этой сборке пустые.
 
