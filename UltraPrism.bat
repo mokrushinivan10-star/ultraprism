@@ -56,10 +56,17 @@ start "" "http://127.0.0.1:43123"
 exit /b 0
 
 :WSL
-wsl.exe -e bash -lc "bash $HOME/ultraprism/scripts/start-ultraprism.sh"
+echo Подключаюсь к Ubuntu...
+echo Если окно остаётся черным больше 20 секунд, закройте его и в PowerShell выполните: wsl --shutdown
+wsl.exe -d Ubuntu -e bash -lc "echo UltraPrism: Ubuntu ответила. && bash $HOME/ultraprism/scripts/start-ultraprism.sh"
 if errorlevel 1 (
-  echo Не удалось запустить через WSL.
-  echo Если папки ultraprism ещё нет, сначала клонируйте репозиторий.
+  echo.
+  echo Ubuntu не ответила. Черный экран значит, что окно открылось, а оболочка зависла.
+  echo Откройте PowerShell и выполните по очереди:
+  echo   wsl --shutdown
+  echo   wsl -l -v
+  echo   wsl --set-default Ubuntu
+  echo   wsl -d Ubuntu -e echo OK
   pause
   exit /b 1
 )

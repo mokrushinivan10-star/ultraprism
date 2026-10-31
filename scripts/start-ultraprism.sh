@@ -2,6 +2,7 @@
 # Поднимает интерфейс UltraPrism на порту 43123 и ждёт, пока он ответит.
 set -euo pipefail
 
+echo "UltraPrism: каталог найден, проверяю Node.js..."
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 LOG="${HOME}/ultraprism-dev.log"
@@ -22,11 +23,14 @@ if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:43123; then
 fi
 
 if [[ -f .next/BUILD_ID ]]; then
+  echo "Запускаю собранный интерфейс. Первые секунды окно может молчать."
   nohup npm run start >>"${LOG}" 2>&1 &
 else
+  echo "Запускаю интерфейс. Первая сборка иногда занимает несколько минут."
   nohup npm run dev >>"${LOG}" 2>&1 &
 fi
 
+echo "Жду http://127.0.0.1:43123 ..."
 for _ in $(seq 1 60); do
   if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:43123; then
     exit 0
