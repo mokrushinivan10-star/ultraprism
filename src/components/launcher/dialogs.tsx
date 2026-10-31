@@ -148,6 +148,7 @@ export function LaunchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     : state.library.accounts.find((item) => item.id === state.library.activeAccountId) ?? null
   const [server, setServer] = useState("")
   const [offline, setOffline] = useState("")
+  const [useOffline, setUseOffline] = useState(false)
   const [shown, setShown] = useState(0)
   const [phase, setPhase] = useState({ open: false, motion: state.theme.motion, run: 0 })
   const [launchServer, setLaunchServer] = useState(real?.joinServer ?? "")
@@ -167,7 +168,7 @@ export function LaunchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     ? [
         { ok: true, label: `Сборка «${real.name}», ${real.version}, ${LOADER_LABEL[real.loader]}` },
         { ok: Boolean(host.status?.executable), label: host.status?.executable ? "Программа ElyPrism найдена" : "Программа elyprismlauncher не найдена" },
-        { ok: true, label: account ? `Аккаунт «${account.name}»` : offline.trim() ? `Офлайн-ник «${offline.trim()}»` : "Аккаунт по умолчанию в ElyPrism" },
+        { ok: useOffline ? offline.trim().length >= 2 : Boolean(account), label: useOffline ? `Офлайн-ник «${offline.trim() || "не задан"}»` : account ? `Аккаунт «${account.name}»` : "Аккаунт Ely.by не выбран" },
         { ok: true, label: "Java и клиент берёт ElyPrism. Папка миров остаётся на месте." },
       ]
     : [
@@ -195,12 +196,20 @@ export function LaunchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
   async function startGame() {
     if (!real || !ready || host.busy) return
-    const args = host.accountArgs()
+    const offlineName = offline.trim()
+    if (useOffline && offlineName.length < 2) {
+      toast.error("Для офлайн-запуска нужен ник хотя бы из двух букв.")
+      return
+    }
+    if (!useOffline && !account) {
+      toast.error("Сначала откройте вход Ely.by и добавьте аккаунт в окне лаунчера.")
+      return
+    }
     const result = await host.run({
       action: "launch",
       instanceId: real.id,
-      profile: offline.trim() ? undefined : args.profile,
-      offline: offline.trim() || args.offline,
+      profile: useOffline ? undefined : account?.name,
+      offline: useOffline ? offlineName : undefined,
       server: server.trim() || undefined,
     })
     if (!result.ok) {
@@ -237,9 +246,23 @@ export function LaunchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             <Field label="Сервер, если нужно зайти сразу">
               <Input value={server} onChange={(event) => setServer(event.target.value)} placeholder="host:25565" />
             </Field>
-            <Field label="Офлайн-ник вместо выбранного аккаунта">
-              <Input value={offline} onChange={(event) => setOffline(event.target.value)} placeholder="Пусто — аккаунт ElyPrism" />
-            </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={useOffline}
+                onChange={(event) => {
+                  const next = event.target.checked
+                  setUseOffline(next)
+                  if (next && !offline.trim()) setOffline(account?.name ?? "")
+                }}
+              />
+              Запустить офлайн, без входа в Ely.by
+            </label>
+            {useOffline && (
+              <Field label="Ник в игре">
+                <Input value={offline} onChange={(event) => setOffline(event.target.value)} placeholder="Ник из двух букв или длиннее" />
+              </Field>
+            )}
           </div>
         )}
         <DialogFooter>

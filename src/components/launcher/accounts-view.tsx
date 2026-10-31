@@ -12,7 +12,7 @@ import { useLauncher } from "@/lib/launcher-context"
 import { uid } from "@/lib/format"
 import type { AccountKind } from "@/lib/types"
 
-const KINDS: AccountKind[] = ["offline", "ely", "microsoft"]
+const KINDS: AccountKind[] = ["offline"]
 
 export function AccountsView() {
   const { state, dispatch } = useLauncher()
@@ -47,7 +47,7 @@ export function AccountsView() {
         <h1 className="text-2xl font-medium tracking-tight">Аккаунты</h1>
         <p className="mt-1 text-sm text-[var(--up-muted)]">
           {host.status?.found
-            ? "Ники ниже прочитаны из accounts.json ElyPrism. Токены в интерфейс не попадают. Вход и новый аккаунт открываются в окне ElyPrism."
+            ? "Настоящий вход в Ely.by делает окно лаунчера. Эта страница пароль не принимает и сама аккаунт не создаёт."
             : "Пока папка ElyPrism не найдена, здесь только локальная подпись ника. Пароль никуда не отправляется."}
         </p>
       </div>
@@ -73,12 +73,22 @@ export function AccountsView() {
             disabled={host.busy}
             onClick={() =>
               void host.run({ action: "window" }).then((result) => {
-                if (result.ok) toast.success(result.message)
+                if (result.ok) toast.success("Окно лаунчера открыто. Дальше вход в Ely.by делается в нём.")
                 else toast.error(result.message)
               })
             }
           >
-            Войти или добавить аккаунт
+            Открыть вход Ely.by
+          </Button>
+          <ol className="grid gap-1 text-sm text-[var(--up-muted)]">
+            <li>1. В окне лаунчера нажмите кнопку с ником справа сверху.</li>
+            <li>2. Нажмите Manage Accounts.</li>
+            <li>3. Нажмите Add Ely.by.</li>
+            <li>4. Браузер откроет account.ely.by. Войдите там. Пароль в эту страницу вводить не нужно.</li>
+            <li>5. Вернитесь сюда и нажмите «Обновить список».</li>
+          </ol>
+          <Button type="button" variant="ghost" disabled={host.busy} onClick={() => void host.refresh().then(() => toast.success("Список аккаунтов обновлён."))}>
+            Обновить список
           </Button>
         </section>
       )}
@@ -116,11 +126,9 @@ export function AccountsView() {
           <span className="text-xs text-[var(--up-muted)]">Короткая пометка</span>
           <Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Необязательно" />
         </Label>
-        {kind !== "offline" && (
-          <p className="text-xs text-[var(--up-muted)]">
-            Метка не подключает аккаунт. Чтобы войти по-настоящему, откройте сайт сервиса в браузере и не вводите пароль в лаунчер.
-          </p>
-        )}
+        <p className="text-xs text-[var(--up-muted)]">
+          Это только ник для запуска без входа. Он не создаёт аккаунт Ely.by и не заменяет кнопку «Открыть вход Ely.by».
+        </p>
         <div>
           <Button type="submit">Сохранить ник</Button>
         </div>
