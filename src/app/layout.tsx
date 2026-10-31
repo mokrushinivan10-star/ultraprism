@@ -24,7 +24,7 @@ const mono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "UltraPrism",
-  description: "Лаунчер с полной настройкой интерфейса. Темы хранятся отдельно от карточек миров.",
+  description: "Лаунчер UltraPrism на основе ElyPrism: сборки, запуск Minecraft и оформление интерфейса.",
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

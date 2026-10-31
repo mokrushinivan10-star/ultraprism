@@ -24,6 +24,10 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { AccountsView } from "@/components/launcher/accounts-view"
 import { CreateInstanceDialog, LaunchDialog } from "@/components/launcher/dialogs"
+import { ElyCreateDialog, ElyImportDialog, ElySettingsDialog } from "@/components/launcher/ely-dialogs"
+import { accountLabel, useElyHost } from "@/components/launcher/ely-host"
+import { ElyInstanceView } from "@/components/launcher/ely-instance"
+import { ElyLibrary } from "@/components/launcher/ely-library"
 import { GuideView } from "@/components/launcher/guide-view"
 import { Mark } from "@/components/launcher/icons"
 import { InstanceView } from "@/components/launcher/instance-view"
@@ -47,14 +51,19 @@ const NAV_ICON = {
 
 export function LauncherApp() {
   const { ready, state, dispatch, query, setQuery } = useLauncher()
+  const host = useElyHost()
   const [launchOpen, setLaunchOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const { theme, library, screen } = state
   const dark = isDarkTheme(theme)
-  const account = library.accounts.find((item) => item.id === library.activeAccountId) ?? null
-  const selected = library.instances.find((item) => item.id === library.selectedInstanceId) ?? null
+  const hostAccount = host.accountName ? host.status?.accounts.find((item) => item.name === host.accountName) ?? null : null
+  const account = host.status?.found ? hostAccount : library.accounts.find((item) => item.id === library.activeAccountId) ?? null
+  const hostSelected = host.status?.instances.find((item) => item.id === host.selectedId) ?? null
+  const selected = host.status?.found ? hostSelected : library.instances.find((item) => item.id === library.selectedInstanceId) ?? null
 
   useEffect(() => {
     const root = document.documentElement
@@ -107,6 +116,17 @@ export function LauncherApp() {
   }
 
   function openPlay(id?: string) {
+    if (host.status?.found) {
+      const target = host.status.instances.find((item) => item.id === (id ?? host.selectedId))
+      if (!target) {
+        toast.message("Сначала выберите сборку ElyPrism.")
+        dispatch({ type: "screen", screen: "library" })
+        return
+      }
+      host.select(target.id)
+      setLaunchOpen(true)
+      return
+    }
     if (id) dispatch({ type: "focus", id })
     const target = id ? library.instances.find((item) => item.id === id) : selected
     if (!target) {
@@ -115,6 +135,11 @@ export function LauncherApp() {
       return
     }
     setLaunchOpen(true)
+  }
+
+  function openInstance(id: string) {
+    host.select(id)
+    dispatch({ type: "screen", screen: "instance" })
   }
 
   function go(view: View) {
@@ -196,18 +221,32 @@ export function LauncherApp() {
                 render={<Button type="button" variant="outline" className="max-w-40" />}
               >
                 <UserRound data-icon="inline-start" />
-                <span className="truncate">{account?.name ?? "Нет ника"}</span>
+                <span className="truncate">{host.status?.found ? account?.name ?? "Аккаунт ElyPrism" : account?.name ?? "Нет ника"}</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Активный ник</DropdownMenuLabel>
+                <DropdownMenuLabel>{host.status?.found ? "Аккаунт ElyPrism" : "Активный ник"}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {library.accounts.length === 0 && <DropdownMenuItem disabled>Список пуст</DropdownMenuItem>}
-                {library.accounts.map((item) => (
-                  <DropdownMenuItem key={item.id} onClick={() => dispatch({ type: "active-account", id: item.id })}>
-                    {item.name}
-                    {item.id === library.activeAccountId ? " · сейчас" : ""}
-                  </DropdownMenuItem>
-                ))}
+                {host.status?.found ? (
+                  <>
+                    <DropdownMenuItem onClick={() => host.setAccountName(null)}>Аккаунт по умолчанию</DropdownMenuItem>
+                    {host.status.accounts.map((item) => (
+                      <DropdownMenuItem key={item.id} onClick={() => host.setAccountName(item.name)}>
+                        {item.name} · {accountLabel(item)}
+                        {item.name === host.accountName ? " · сейчас" : ""}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    {library.accounts.length === 0 && <DropdownMenuItem disabled>Список пуст</DropdownMenuItem>}
+                    {library.accounts.map((item) => (
+                      <DropdownMenuItem key={item.id} onClick={() => dispatch({ type: "active-account", id: item.id })}>
+                        {item.name}
+                        {item.id === library.activeAccountId ? " · сейчас" : ""}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => go("accounts")}>Управление</DropdownMenuItem>
               </DropdownMenuContent>
@@ -221,18 +260,41 @@ export function LauncherApp() {
 
           <main className="min-h-0 flex-1 overflow-auto">
             <div key={screen === "instance" ? `instance-${library.selectedInstanceId}` : screen} className="up-view">
-              {screen === "library" && <LibraryView onCreate={() => setCreateOpen(true)} onPlay={(id) => openPlay(id)} />}
+              {screen === "library" && host.loading && (
+                <p className="p-6 text-sm text-muted-foreground">Читаем сборки ElyPrism…</p>
+              )}
+              {screen === "library" && !host.loading && host.status?.found && (
+                <ElyLibrary
+                  onPlay={(id) => openPlay(id)}
+                  onOpen={openInstance}
+                  onCreate={() => setCreateOpen(true)}
+                  onImport={() => setImportOpen(true)}
+                  onSettings={() => setSettingsOpen(true)}
+                />
+              )}
+              {screen === "library" && !host.loading && !host.status?.found && (
+                <LibraryView onCreate={() => setCreateOpen(true)} onPlay={(id) => openPlay(id)} />
+              )}
               {screen === "studio" && <StudioView />}
               {screen === "worlds" && <WorldsView />}
               {screen === "accounts" && <AccountsView />}
               {screen === "guide" && <GuideView />}
-              {screen === "instance" && <InstanceView onPlay={() => openPlay()} />}
+              {screen === "instance" && host.status?.found && <ElyInstanceView onPlay={() => openPlay()} />}
+              {screen === "instance" && !host.status?.found && <InstanceView onPlay={() => openPlay()} />}
             </div>
           </main>
 
           {theme.chrome.statusBar && (
             <footer className="flex h-9 shrink-0 items-center gap-3 overflow-x-auto border-t border-border px-3 text-[11px] text-muted-foreground">
-              <span>Java не подключена</span>
+              <span>
+                {host.loading
+                  ? "Ищем ElyPrism"
+                  : host.status?.executable
+                    ? "ElyPrism подключён"
+                    : host.status?.found
+                      ? "Папка ElyPrism найдена"
+                      : "ElyPrism не найден"}
+              </span>
               <span>{countLabel(library.worlds.length, "карточка мира", "карточки миров", "карточек миров")} · тема их не пишет</span>
               <span className="truncate">Тема: {theme.name}</span>
               <span className="ml-auto shrink-0">время: {TIME_ZONE_LABEL}</span>
@@ -242,7 +304,13 @@ export function LauncherApp() {
       </div>
 
       {theme.customCss.trim() && <style>{sanitizeCss(theme.customCss)}</style>}
-      <CreateInstanceDialog open={createOpen} onOpenChange={setCreateOpen} />
+      {host.status?.found ? (
+        <ElyCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+      ) : (
+        <CreateInstanceDialog open={createOpen} onOpenChange={setCreateOpen} />
+      )}
+      <ElyImportDialog open={importOpen} onOpenChange={setImportOpen} />
+      <ElySettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <LaunchDialog open={launchOpen} onOpenChange={setLaunchOpen} />
       <Toaster theme={dark ? "dark" : "light"} />
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>

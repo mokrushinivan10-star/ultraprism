@@ -12,7 +12,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Textarea } from "@/components/ui/textarea"
 import { InstanceCard } from "@/components/launcher/cards"
+import { useElyHost } from "@/components/launcher/ely-host"
 import { slugify } from "@/lib/format"
+import { toCard } from "@/lib/elyprism-model"
 import { COLOR_LABEL, NAV_LABEL } from "@/lib/labels"
 import { useLauncher } from "@/lib/launcher-context"
 import { PRESETS, presetById } from "@/lib/presets"
@@ -23,11 +25,12 @@ import { cn } from "@/lib/utils"
 
 export function StudioView() {
   const { state, dispatch } = useLauncher()
+  const host = useElyHost()
   const { theme, library } = state
   const fileRef = useRef<HTMLInputElement>(null)
   const ratio = contrastRatio(theme.colors.text, theme.colors.bg)
   const contrast = contrastLabel(ratio)
-  const sample = library.instances[0]
+  const sample = host.status?.found && host.status.instances[0] ? toCard(host.status.instances[0]) : library.instances[0]
 
   function patch(next: Partial<UltraTheme>, history = false) {
     dispatch({ type: "patch-theme", patch: next, history })
@@ -345,8 +348,24 @@ export function StudioView() {
             instance={sample}
             theme={theme}
             worlds={library.worlds.filter((world) => world.instanceId === sample.id).length}
-            onOpen={() => dispatch({ type: "select", id: sample.id })}
-            onPlay={() => dispatch({ type: "select", id: sample.id })}
+            showFavorite={!host.status?.found}
+            showWorlds={!host.status?.found}
+            onOpen={() => {
+              if (host.status?.found && host.status.instances[0]) {
+                host.select(host.status.instances[0].id)
+                dispatch({ type: "screen", screen: "instance" })
+                return
+              }
+              dispatch({ type: "select", id: sample.id })
+            }}
+            onPlay={() => {
+              if (host.status?.found && host.status.instances[0]) {
+                host.select(host.status.instances[0].id)
+                dispatch({ type: "screen", screen: "instance" })
+                return
+              }
+              dispatch({ type: "select", id: sample.id })
+            }}
           />
         ) : (
           <p className="text-sm text-[var(--up-muted)]">Нет сборки для образца. Создайте карточку в библиотеке.</p>

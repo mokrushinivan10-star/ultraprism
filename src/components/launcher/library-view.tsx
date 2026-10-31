@@ -113,8 +113,10 @@ export function LibraryView({ onPlay, onCreate }: { onPlay: (id: string) => void
             <AlertDescription>Цвет, шрифт и макет применяются на лету. Отмена — Ctrl+Z или кнопка в студии.</AlertDescription>
           </Alert>
           <Alert>
-            <AlertTitle>Это не ElyPrism</AlertTitle>
-            <AlertDescription>Установленный лаунчер и его сохранения эта копия не открывает.</AlertDescription>
+            <AlertTitle>ElyPrism не найден</AlertTitle>
+            <AlertDescription>
+              Папка сборок на этом компьютере не прочиталась. Кнопка «Играть» запустит Minecraft, когда UltraPrism увидит установленный ElyPrism.
+            </AlertDescription>
           </Alert>
         </aside>
       )}

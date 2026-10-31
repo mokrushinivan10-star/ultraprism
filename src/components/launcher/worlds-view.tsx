@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useElyHost } from "@/components/launcher/ely-host"
 import { formatWhen, uid } from "@/lib/format"
 import { DIMENSION_LABEL, MODE_LABEL } from "@/lib/labels"
 import { useLauncher } from "@/lib/launcher-context"
@@ -31,6 +32,7 @@ const DIMENSIONS: Dimension[] = ["overworld", "nether", "end"]
 
 export function WorldsView() {
   const { state, dispatch } = useLauncher()
+  const host = useElyHost()
   const [name, setName] = useState("")
   const [instanceId, setInstanceId] = useState<string>("none")
   const [gameMode, setGameMode] = useState<GameMode>("survival")
@@ -69,7 +71,9 @@ export function WorldsView() {
         <p className="text-[11px] tracking-[0.16em] text-[var(--up-muted)] uppercase">Хранилище</p>
         <h1 className="text-2xl font-medium tracking-tight">Миры</h1>
         <p className="mt-1 max-w-2xl text-sm text-[var(--up-muted)]">
-          Здесь только подписи. UltraPrism не читает level.dat, не пишет в папку сохранений и не удаляет миры ElyPrism. Смена темы сюда не заглядывает.
+          {host.status?.found
+            ? "Настоящие миры лежат в папке saves каждой сборки и открываются со страницы сборки. Этот список — отдельные подписи, тема в них не пишет и файлы не удаляет."
+            : "Здесь подписи миров. Папка ElyPrism на этом компьютере не найдена, поэтому сохранения игры не читаются."}
         </p>
       </div>
 

@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { InstanceIcon } from "@/components/launcher/icons"
+import { useElyHost } from "@/components/launcher/ely-host"
 import { uid } from "@/lib/format"
 import { LOADER_LABEL } from "@/lib/labels"
 import { useLauncher } from "@/lib/launcher-context"
@@ -139,21 +140,42 @@ const LAUNCH_BEATS = 4
 
 export function LaunchDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { state, dispatch } = useLauncher()
-  const instance = state.library.instances.find((item) => item.id === state.library.selectedInstanceId) ?? null
-  const account = state.library.accounts.find((item) => item.id === state.library.activeAccountId) ?? null
-  const worlds = state.library.worlds.filter((world) => world.instanceId === instance?.id)
+  const host = useElyHost()
+  const real = host.status?.instances.find((item) => item.id === host.selectedId) ?? null
+  const instance = real ? null : state.library.instances.find((item) => item.id === state.library.selectedInstanceId) ?? null
+  const account = host.status?.found
+    ? host.status.accounts.find((item) => item.name === host.accountName) ?? null
+    : state.library.accounts.find((item) => item.id === state.library.activeAccountId) ?? null
+  const [server, setServer] = useState("")
+  const [offline, setOffline] = useState("")
   const [shown, setShown] = useState(0)
   const [phase, setPhase] = useState({ open: false, motion: state.theme.motion, run: 0 })
+  const [launchServer, setLaunchServer] = useState(real?.joinServer ?? "")
+  if ((real?.joinServer ?? "") !== launchServer && !open) {
+    setLaunchServer(real?.joinServer ?? "")
+    setServer(real?.joinServer ?? "")
+  }
   if (open !== phase.open || state.theme.motion !== phase.motion) {
     setPhase({ open, motion: state.theme.motion, run: phase.run + 1 })
-    if (open) setShown(state.theme.motion === "off" ? LAUNCH_BEATS : 0)
+    if (open) {
+      setShown(state.theme.motion === "off" ? LAUNCH_BEATS : 0)
+      setServer(real?.joinServer ?? "")
+    }
   }
-  const steps = [
-    { ok: Boolean(instance), label: instance ? `Сборка «${instance.name}»` : "Сборка не выбрана" },
-    { ok: Boolean(account), label: account ? `Ник «${account.name}»` : "Нет активного ника — добавьте его в «Аккаунты»" },
-    { ok: true, label: `Карточек миров у сборки: ${worlds.length}. Запись в них закрыта.` },
-    { ok: true, label: "Тема интерфейса в запуск не входит." },
-  ]
+  const exeReady = Boolean(host.status?.executable)
+  const steps = real
+    ? [
+        { ok: true, label: `Сборка «${real.name}», ${real.version}, ${LOADER_LABEL[real.loader]}` },
+        { ok: Boolean(host.status?.executable), label: host.status?.executable ? "Программа ElyPrism найдена" : "Программа elyprismlauncher не найдена" },
+        { ok: true, label: account ? `Аккаунт «${account.name}»` : offline.trim() ? `Офлайн-ник «${offline.trim()}»` : "Аккаунт по умолчанию в ElyPrism" },
+        { ok: true, label: "Java и клиент берёт ElyPrism. Папка миров остаётся на месте." },
+      ]
+    : [
+        { ok: false, label: instance ? `Карточка «${instance.name}» есть только в браузере` : "Сборка не выбрана" },
+        { ok: false, label: host.error || host.status?.message || "Папка ElyPrism на этом компьютере не найдена" },
+        { ok: Boolean(account), label: account ? `Ник «${account.name}»` : "Аккаунт не выбран" },
+        { ok: false, label: "Без установленного ElyPrism игра не запускается." },
+      ]
   const ready = shown >= LAUNCH_BEATS
   const caption = ready ? "Проверка закончена" : shown === 0 ? "Собираем шаги" : "Идёт проверка"
 
@@ -171,10 +193,22 @@ export function LaunchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     return () => timers.forEach((timer) => window.clearTimeout(timer))
   }, [open, phase.run, state.theme.motion])
 
-  function note() {
-    if (!instance || !account || !ready) return
-    dispatch({ type: "note-launch", instanceId: instance.id, accountId: account.id })
-    toast.success("Отметка сохранена в карточке. Миры не открывались.")
+  async function startGame() {
+    if (!real || !ready || host.busy) return
+    const args = host.accountArgs()
+    const result = await host.run({
+      action: "launch",
+      instanceId: real.id,
+      profile: offline.trim() ? undefined : args.profile,
+      offline: offline.trim() || args.offline,
+      server: server.trim() || undefined,
+    })
+    if (!result.ok) {
+      toast.error(result.message)
+      return
+    }
+    if (account) dispatch({ type: "note-launch", instanceId: real.id, accountId: account.id })
+    toast.success(result.message)
     onOpenChange(false)
   }
 
@@ -182,9 +216,11 @@ export function LaunchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[min(36rem,calc(100%-2rem))]" style={{ maxWidth: "36rem" }}>
         <DialogHeader>
-          <DialogTitle>Подготовка к запуску</DialogTitle>
+          <DialogTitle>{real ? "Запуск Minecraft" : "Подготовка к запуску"}</DialogTitle>
           <DialogDescription>
-            Шаги проходят по очереди. UltraPrism не открывает сохранения. В этой копии клиент Minecraft не стартует: здесь нет Java и папки ElyPrism.
+            {real
+              ? "UltraPrism передаёт сборку установленному ElyPrism. Дальше Java, вход и окно игры ведёт он."
+              : "На этом компьютере папка ElyPrism не найдена, поэтому кнопка запуска не стартует игру."}
           </DialogDescription>
         </DialogHeader>
         <Progress value={(shown / LAUNCH_BEATS) * 100} className="up-launch-bar">
@@ -196,12 +232,27 @@ export function LaunchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             <Check key={step.label} ok={step.ok} label={step.label} on={index < shown} />
           ))}
         </ul>
+        {real && (
+          <div className="grid gap-3">
+            <Field label="Сервер, если нужно зайти сразу">
+              <Input value={server} onChange={(event) => setServer(event.target.value)} placeholder="host:25565" />
+            </Field>
+            <Field label="Офлайн-ник вместо выбранного аккаунта">
+              <Input value={offline} onChange={(event) => setOffline(event.target.value)} placeholder="Пусто — аккаунт ElyPrism" />
+            </Field>
+          </div>
+        )}
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Закрыть
           </Button>
-          <Button type="button" className={cn("up-launch-go", ready && "up-launch-ready")} disabled={!instance || !account || !ready} onClick={note}>
-            Записать отметку
+          <Button
+            type="button"
+            className={cn("up-launch-go", ready && real && exeReady && "up-launch-ready")}
+            disabled={!real || !exeReady || !ready || host.busy}
+            onClick={() => void startGame()}
+          >
+            {real ? "Запустить" : "ElyPrism не найден"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -18,6 +18,8 @@ export function InstanceCard({
   worlds,
   featured = false,
   delay = 0,
+  showFavorite = true,
+  showWorlds = true,
   onOpen,
   onPlay,
 }: {
@@ -26,6 +28,8 @@ export function InstanceCard({
   worlds: number
   featured?: boolean
   delay?: number
+  showFavorite?: boolean
+  showWorlds?: boolean
   onOpen: () => void
   onPlay: () => void
 }) {
@@ -68,12 +72,12 @@ export function InstanceCard({
             </Badge>
           )}
           <Badge variant="secondary">{LOADER_LABEL[instance.loader]}</Badge>
-          {theme.chrome.worldCount && <Badge variant="ghost">{countLabel(worlds, "мир", "мира", "миров")}</Badge>}
+          {theme.chrome.worldCount && showWorlds && <Badge variant="ghost">{countLabel(worlds, "мир", "мира", "миров")}</Badge>}
         </div>
         {theme.chrome.notes && instance.notes && !list && (
           <CardDescription className="line-clamp-2">{instance.notes}</CardDescription>
         )}
-        <p className="text-xs text-muted-foreground">Играли: {formatWhen(instance.lastPlayed, "ещё не отмечали")}</p>
+        <p className="text-xs text-muted-foreground">Играли: {formatWhen(instance.lastPlayed, "ещё не запускали")}</p>
       </CardContent>
       <CardFooter
         className={cn(list && "ml-auto w-auto border-0 bg-transparent")}
@@ -83,15 +87,17 @@ export function InstanceCard({
         <Button type="button" size="sm" onClick={onPlay}>
           Играть
         </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          aria-label={instance.favorite ? "Убрать из избранного" : "В избранное"}
-          onClick={() => dispatch({ type: "toggle-favorite", id: instance.id })}
-        >
-          <Star key={instance.favorite ? "on" : "off"} className="up-pop size-3.5" fill={instance.favorite ? "currentColor" : "none"} />
-        </Button>
+        {showFavorite && (
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            aria-label={instance.favorite ? "Убрать из избранного" : "В избранное"}
+            onClick={() => dispatch({ type: "toggle-favorite", id: instance.id })}
+          >
+            <Star key={instance.favorite ? "on" : "off"} className="up-pop size-3.5" fill={instance.favorite ? "currentColor" : "none"} />
+          </Button>
+        )}
       </CardFooter>
     </Card>
   )
