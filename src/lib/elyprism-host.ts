@@ -100,13 +100,35 @@ async function listWindowsUsers(): Promise<string[]> {
   return names.filter((name) => !SKIP_USERS.has(name) && !name.startsWith("."))
 }
 
-async function findDataDir(env: NodeJS.ProcessEnv): Promise<string | null> {
-  const fromEnv = [env.ULTRAPRISM_ELY_DIR, env.ELYPRISMLAUNCHER_DATA_DIR, env.PINECONEMC_DATA_DIR].find(Boolean)
-  if (fromEnv) return (await isDataDir(fromEnv)) ? path.resolve(fromEnv) : null
+function runtimeEnv(passed?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const live = globalThis.process ? globalThis.process["env"] : {}
+  return { ...live, ...(passed ?? {}) }
+}
 
-  if (process.platform === "win32" && env.APPDATA) {
-    const dir = path.join(env.APPDATA, "ElyPrismLauncher")
-    if (await isDataDir(dir)) return dir
+function envPick(env: NodeJS.ProcessEnv, key: string): string | undefined {
+  const value = env[key]
+  return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+async function findDataDir(env: NodeJS.ProcessEnv): Promise<string | null> {
+  const merged = runtimeEnv(env)
+  const candidates: string[] = []
+  for (const key of ["ULTRAPRISM_ELY_DIR", "ELYPRISMLAUNCHER_DATA_DIR", "PINECONEMC_DATA_DIR"]) {
+    const value = envPick(merged, key)
+    if (value) candidates.push(value)
+  }
+  const appData = envPick(merged, "APPDATA")
+  if (appData) candidates.push(path.join(appData, "ElyPrismLauncher"))
+  if (process.platform === "win32") {
+    candidates.push(path.join(os.homedir(), "AppData", "Roaming", "ElyPrismLauncher"))
+  }
+
+  const seen = new Set<string>()
+  for (const candidate of candidates) {
+    const resolved = path.resolve(candidate)
+    if (seen.has(resolved)) continue
+    seen.add(resolved)
+    if (await isDataDir(resolved)) return resolved
   }
 
   for (const user of await listWindowsUsers()) {
@@ -138,23 +160,28 @@ async function readRegistryInstallDir(): Promise<string | null> {
 }
 
 async function findExecutable(env: NodeJS.ProcessEnv): Promise<string | null> {
-  if (env.ULTRAPRISM_ELY_EXE && (await exists(env.ULTRAPRISM_ELY_EXE))) return path.resolve(env.ULTRAPRISM_ELY_EXE)
+  const merged = runtimeEnv(env)
+  const roots: string[] = []
+  const fromEnv = envPick(merged, "ULTRAPRISM_ELY_EXE")
+  if (fromEnv && (await exists(fromEnv))) return path.resolve(fromEnv)
+  roots.push(path.resolve(process.cwd(), "launcher", "install", "elyprismlauncher.exe"))
 
-  const found: string[] = []
   const install = await readRegistryInstallDir()
   if (install) {
     const exe = path.win32.join(install, "elyprismlauncher.exe")
     const local = process.platform === "win32" ? exe : toWslPath(exe)
-    if (local && (await exists(local))) found.push(local)
+    if (local) roots.push(local)
   }
 
-  const roots: string[] = []
-  if (process.platform === "win32" && env.LOCALAPPDATA) {
-    roots.push(path.join(env.LOCALAPPDATA, "Programs", "ElyPrismLauncher", "elyprismlauncher.exe"))
-    roots.push(path.join(env.LOCALAPPDATA, "Programs", "PineconeMC", "elyprismlauncher.exe"))
+  const localAppData = envPick(merged, "LOCALAPPDATA")
+  if (process.platform === "win32") {
+    const programs = localAppData ? path.join(localAppData, "Programs") : path.join(os.homedir(), "AppData", "Local", "Programs")
+    roots.push(path.join(programs, "ElyPrismLauncher", "elyprismlauncher.exe"))
+    roots.push(path.join(programs, "PineconeMC", "elyprismlauncher.exe"))
   }
-  if (process.platform === "win32" && env.ProgramFiles) {
-    roots.push(path.join(env.ProgramFiles, "ElyPrismLauncher", "elyprismlauncher.exe"))
+  const programFiles = envPick(merged, "ProgramFiles")
+  if (process.platform === "win32" && programFiles) {
+    roots.push(path.join(programFiles, "ElyPrismLauncher", "elyprismlauncher.exe"))
   }
   for (const user of await listWindowsUsers()) {
     const base = toWslPath(path.win32.join("C:\\Users", user, "AppData", "Local", "Programs"))
@@ -165,6 +192,7 @@ async function findExecutable(env: NodeJS.ProcessEnv): Promise<string | null> {
   roots.push("/mnt/c/Program Files/ElyPrismLauncher/elyprismlauncher.exe")
   roots.push("/mnt/c/Program Files/PineconeMC/elyprismlauncher.exe")
 
+  const found: string[] = []
   for (const candidate of roots) {
     if (await exists(candidate)) found.push(candidate)
   }
@@ -336,7 +364,7 @@ function liveSessions(): string[] {
   return live
 }
 
-export async function inspectHost(env: NodeJS.ProcessEnv = process.env): Promise<ElyHostStatus> {
+export async function inspectHost(env: NodeJS.ProcessEnv = runtimeEnv()): Promise<ElyHostStatus> {
   const dataDir = await findDataDir(env)
   const executable = await findExecutable(env)
   if (!dataDir) {

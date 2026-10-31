@@ -129,6 +129,20 @@ describe("elyprism host", () => {
     expect(args).not.toContain("super-secret-token")
   })
 
+  it("uses AppData when the explicit folder is missing", async () => {
+    const appData = await fs.mkdtemp(path.join(os.tmpdir(), "ultraprism-appdata-"))
+    roots.push(appData)
+    const data = path.join(appData, "ElyPrismLauncher")
+    await fs.mkdir(path.join(data, "instances"), { recursive: true })
+    const host = await inspectHost({
+      ULTRAPRISM_ELY_DIR: path.join(appData, "missing"),
+      ULTRAPRISM_ELY_EXE: path.join(appData, "missing.exe"),
+      APPDATA: appData,
+    })
+    expect(host.found).toBe(true)
+    expect(host.dataDir).toBe(data)
+  })
+
   it("creates a vanilla instance", async () => {
     const { root, env } = await fixture()
     const result = await performAction({ action: "create", name: "Пустой лист", version: "1.21.4", loader: "vanilla" }, env, async () => ({ pid: 1 }))
