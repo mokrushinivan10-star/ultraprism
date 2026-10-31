@@ -89,14 +89,10 @@
 #include <QAccessible>
 #include <QCommandLineParser>
 #include <QDebug>
-#include <QDesktopServices>
 #include <QDir>
 #include <QFileInfo>
 #include <QProcess>
-#include <QTcpSocket>
-#include <QThread>
 #include <QUrl>
-#include <QFileInfo>
 #include <QFileOpenEvent>
 #include <QIcon>
 #include <QLibraryInfo>
@@ -1229,8 +1225,6 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
 bool Application::createSetupWizard()
 {
-    // UltraPrism replaces the ElyPrism first-run wizard.
-    return false;
     bool javaRequired = [this]() {
         if (BuildConfig.JAVA_DOWNLOADER_ENABLED && settings()->get("AutomaticJavaDownload").toBool()) {
             return false;
@@ -1691,64 +1685,28 @@ void Application::ShowGlobalSettings(class QWidget* parent, QString open_page)
     }
 }
 
-static bool ultraPrismPortOpen()
-{
-    QTcpSocket socket;
-    socket.connectToHost(QStringLiteral("127.0.0.1"), 43123);
-    return socket.waitForConnected(250);
-}
-
-static QString ultraPrismRoot()
-{
-    const QString fromEnv = qEnvironmentVariable("ULTRAPRISM_DIR");
-    if (!fromEnv.isEmpty() && QFileInfo::exists(fromEnv + QStringLiteral("/package.json"))) {
-        return QDir(fromEnv).absolutePath();
-    }
-    QDir dir(QCoreApplication::applicationDirPath());
-    for (int i = 0; i < 4; ++i) {
-        if (QFileInfo::exists(dir.filePath(QStringLiteral("package.json"))) && QFileInfo::exists(dir.filePath(QStringLiteral("src/app/page.tsx")))) {
-            return dir.absolutePath();
-        }
-        if (!dir.cdUp()) {
-            break;
-        }
-    }
-    return {};
-}
-
-void Application::openUltraPrism()
-{
-    const QUrl url(QStringLiteral("http://127.0.0.1:43123"));
-    if (!ultraPrismPortOpen()) {
-        const QString root = ultraPrismRoot();
-        if (root.isEmpty()) {
-            qWarning() << "UltraPrism interface was not found. Set ULTRAPRISM_DIR to the project root.";
-            return;
-        }
-        auto* process = new QProcess(this);
-        process->setWorkingDirectory(root);
-        process->setProgram(QStringLiteral("npm"));
-        const bool built = QFileInfo::exists(root + QStringLiteral("/.next/BUILD_ID"));
-        process->setArguments(built ? QStringList{ QStringLiteral("run"), QStringLiteral("start") }
-                                     : QStringList{ QStringLiteral("run"), QStringLiteral("dev") });
-        process->start();
-        for (int i = 0; i < 80 && !ultraPrismPortOpen(); ++i) {
-            QThread::msleep(250);
-        }
-    }
-    if (!QDesktopServices::openUrl(url)) {
-        qWarning() << "Could not open" << url;
-    }
-}
-
 MainWindow* Application::showMainWindow(bool minimized)
 {
-    Q_UNUSED(minimized);
-    if (!m_ultraPrismOpened) {
-        m_ultraPrismOpened = true;
-        openUltraPrism();
+    if (m_mainWindow) {
+        m_mainWindow->setWindowState(m_mainWindow->windowState() & ~Qt::WindowMinimized);
+        m_mainWindow->raise();
+        m_mainWindow->activateWindow();
+    } else {
+        m_mainWindow = new MainWindow();
+        m_mainWindow->restoreState(QByteArray::fromBase64(APPLICATION->settings()->get("MainWindowState").toString().toUtf8()));
+        m_mainWindow->restoreGeometry(QByteArray::fromBase64(APPLICATION->settings()->get("MainWindowGeometry").toString().toUtf8()));
+
+        if (minimized) {
+            m_mainWindow->showMinimized();
+        } else {
+            m_mainWindow->show();
+        }
+
+        m_mainWindow->checkInstancePathForProblems();
+        connect(this, &Application::updateAllowedChanged, m_mainWindow, &MainWindow::updatesAllowedChanged);
+        connect(m_mainWindow, &MainWindow::isClosing, this, &Application::on_windowClose);
+        m_openWindows++;
     }
-    // The ElyPrism main window stays closed. UltraPrism is the interface.
     return m_mainWindow;
 }
 

@@ -191,7 +191,6 @@ class Application : public QApplication {
 
     InstanceWindow* showInstanceWindow(BaseInstance* instance, QString page = QString());
     MainWindow* showMainWindow(bool minimized = false);
-    void openUltraPrism();
     ViewLogWindow* showLogWindow();
 
     void updateIsRunning(bool running);
@@ -298,7 +297,6 @@ class Application : public QApplication {
 
     // main window, if any
     MainWindow* m_mainWindow = nullptr;
-    bool m_ultraPrismOpened = false;
 
     // log window, if any
     ViewLogWindow* m_viewLogWindow = nullptr;
