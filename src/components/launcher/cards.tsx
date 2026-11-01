@@ -1,6 +1,6 @@
 "use client"
 
-import type { CSSProperties } from "react"
+import { useRef, type CSSProperties, type ChangeEvent, type RefObject } from "react"
 import { Star } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,6 +22,7 @@ export function InstanceCard({
   showWorlds = true,
   onOpen,
   onPlay,
+  onPickImage,
 }: {
   instance: Instance
   theme: UltraTheme
@@ -32,10 +33,13 @@ export function InstanceCard({
   showWorlds?: boolean
   onOpen: () => void
   onPlay: () => void
+  onPickImage?: (file: File) => void
 }) {
   const { dispatch } = useLauncher()
+  const fileRef = useRef<HTMLInputElement>(null)
   const accent = instance.accent || theme.colors.accent
   const list = theme.cards === "list"
+  const iconClass = cn("shrink-0 self-center", featured && !list ? "size-14" : "size-10")
   return (
     <div className={cn("@container/instance min-w-0 w-full", featured && theme.cards === "mosaic" && "sm:col-span-2 sm:row-span-2")}>
     <Card
@@ -57,7 +61,18 @@ export function InstanceCard({
       }}
     >
       <CardHeader className={cn("flex min-w-0 flex-row items-center gap-3 overflow-hidden", list && "flex-1 @max-[34rem]/instance:flex-none")}>
-        <InstanceIcon icon={instance.icon} accent={accent} className={cn("shrink-0 self-center", featured && !list ? "size-14" : "size-10")} />
+        <CardPicture
+          instance={instance}
+          accent={accent}
+          className={iconClass}
+          fileRef={fileRef}
+          onPickImage={onPickImage}
+          onFile={(event) => {
+            const file = event.target.files?.[0]
+            event.target.value = ""
+            if (file) onPickImage?.(file)
+          }}
+        />
         <div className="min-w-0">
           <CardTitle className={cn("truncate", featured && !list && "text-xl")}>{instance.name}</CardTitle>
           <p className="truncate text-sm text-muted-foreground">{instance.group || "Без группы"}</p>
@@ -100,6 +115,57 @@ export function InstanceCard({
       </CardFooter>
     </Card>
     </div>
+  )
+}
+
+function CardPicture({
+  instance,
+  accent,
+  className,
+  fileRef,
+  onPickImage,
+  onFile,
+}: {
+  instance: Instance
+  accent: string
+  className: string
+  fileRef: RefObject<HTMLInputElement | null>
+  onPickImage?: (file: File) => void
+  onFile: (event: ChangeEvent<HTMLInputElement>) => void
+}) {
+  const picture = instance.imageUrl ? (
+    <span
+      aria-hidden
+      className={cn(className, "block bg-cover bg-center")}
+      style={{ backgroundImage: `url(${JSON.stringify(instance.imageUrl)})`, borderRadius: "calc(var(--radius) - 4px)" }}
+    />
+  ) : (
+    <InstanceIcon icon={instance.icon} accent={accent} className={className} />
+  )
+  if (!onPickImage) return picture
+  return (
+    <>
+      <button
+        type="button"
+        className="block shrink-0 border-0 bg-transparent p-0 leading-none"
+        aria-label={`Картинка сборки ${instance.name}`}
+        title="Поставить свою картинку"
+        onClick={(event) => {
+          event.stopPropagation()
+          fileRef.current?.click()
+        }}
+      >
+        {picture}
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="hidden"
+        onClick={(event) => event.stopPropagation()}
+        onChange={onFile}
+      />
+    </>
   )
 }
 

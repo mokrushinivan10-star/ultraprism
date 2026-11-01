@@ -91,6 +91,7 @@ export type Instance = {
   loader: Loader
   group: string
   icon: IconId
+  imageUrl?: string | null
   accent: string | null
   notes: string
   favorite: boolean

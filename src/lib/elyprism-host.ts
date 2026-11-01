@@ -281,6 +281,8 @@ function summaryFrom(id: string, cfg: Record<string, string>, group: string, com
     group,
     notes: cfg.notes ?? "",
     iconKey: cfg.iconKey || "default",
+    hasIcon: false,
+    iconStamp: 0,
     lastLaunchTime: iniNumber(cfg.lastLaunchTime),
     totalTimePlayed: iniNumber(cfg.totalTimePlayed) ?? 0,
     minMem: iniBool(cfg.OverrideMemory) ? iniNumber(cfg.MinMemAlloc) : null,
@@ -349,6 +351,7 @@ export async function readInstances(dataDir: string): Promise<ElyInstanceSummary
   const instancesDir = path.join(dataDir, "instances")
   if (!(await exists(instancesDir))) return []
   const groups = await readGroups(instancesDir)
+  const icons = await iconIndex(dataDir)
   const names = await fs.readdir(instancesDir, { withFileTypes: true })
   const list: ElyInstanceSummary[] = []
   for (const entry of names) {
@@ -364,7 +367,13 @@ export async function readInstances(dataDir: string): Promise<ElyInstanceSummary
     const cfg = parseIni(await fs.readFile(cfgPath, "utf8"))
     const packPath = path.join(root, "mmc-pack.json")
     const pack = (await exists(packPath)) ? await fs.readFile(packPath, "utf8") : ""
-    list.push(summaryFrom(entry.name, cfg, groups[entry.name] ?? "", pack))
+    const summary = summaryFrom(entry.name, cfg, groups[entry.name] ?? "", pack)
+    const icon = icons.get(summary.iconKey)
+    if (icon) {
+      summary.hasIcon = true
+      summary.iconStamp = icon.mtime
+    }
+    list.push(summary)
   }
   list.sort((left, right) => left.name.localeCompare(right.name, "ru"))
   return list
@@ -620,6 +629,104 @@ export async function readScreenshot(dataDir: string, instanceId: string, name: 
         ? "image/webp"
         : "image/jpeg"
   return { body, type }
+}
+
+const ICON_LIMIT = 2_000_000
+
+export function sniffImage(body: Buffer): { type: string; ext: string } | null {
+  if (body.length >= 8 && body[0] === 0x89 && body[1] === 0x50 && body[2] === 0x4e && body[3] === 0x47) return { type: "image/png", ext: "png" }
+  if (body.length >= 3 && body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff) return { type: "image/jpeg", ext: "jpg" }
+  if (body.length >= 6) {
+    const head = body.subarray(0, 6).toString("ascii")
+    if (head === "GIF87a" || head === "GIF89a") return { type: "image/gif", ext: "gif" }
+  }
+  if (body.length >= 12 && body.subarray(0, 4).toString("ascii") === "RIFF" && body.subarray(8, 12).toString("ascii") === "WEBP") {
+    return { type: "image/webp", ext: "webp" }
+  }
+  return null
+}
+
+export function instanceIconKey(instanceId: string): string {
+  const clean = assertSafeId(instanceId).replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60)
+  return `up-${clean || "instance"}`
+}
+
+export async function readInstanceIcon(dataDir: string, instanceId: string): Promise<{ body: Buffer; type: string } | null> {
+  const id = assertSafeId(instanceId)
+  const cfgPath = path.join(instanceRoot(dataDir, id), "instance.cfg")
+  if (!(await exists(cfgPath))) return null
+  const key = parseIni(await fs.readFile(cfgPath, "utf8")).iconKey?.trim() || ""
+  const hit = (await iconIndex(dataDir)).get(key)
+  if (!hit) return null
+  const stat = await fs.stat(hit.file)
+  if (!stat.isFile() || stat.size > 8_000_000) return null
+  const body = await fs.readFile(hit.file)
+  const sniffed = sniffImage(body)
+  if (!sniffed) return null
+  return { body, type: sniffed.type }
+}
+
+export async function saveInstanceIcon(instanceId: string, body: Buffer, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  if (body.length === 0 || body.length > ICON_LIMIT) throw new Error("Картинка пустая или больше 2 МБ.")
+  const sniffed = sniffImage(body)
+  if (!sniffed) throw new Error("Нужна картинка PNG, JPEG, WEBP или GIF.")
+  const host = await inspectHost(env)
+  if (!host.found || !host.dataDir) throw new Error(host.message || "Папка ElyPrism не найдена.")
+  const id = assertSafeId(instanceId)
+  const cfgPath = path.join(instanceRoot(host.dataDir, id), "instance.cfg")
+  if (!(await exists(cfgPath))) throw new Error("Сборка в папке ElyPrism не найдена.")
+  const key = instanceIconKey(id)
+  const iconsDir = path.join(host.dataDir, "icons")
+  await fs.mkdir(iconsDir, { recursive: true })
+  await removeOwnedIcons(iconsDir, key)
+  const target = iconFile(iconsDir, `${key}.${sniffed.ext}`)
+  await fs.writeFile(target, body)
+  const original = await fs.readFile(cfgPath, "utf8")
+  await fs.writeFile(cfgPath, patchIni(original, { iconKey: key }), "utf8")
+}
+
+export async function clearInstanceIcon(instanceId: string, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const host = await inspectHost(env)
+  if (!host.found || !host.dataDir) throw new Error(host.message || "Папка ElyPrism не найдена.")
+  const id = assertSafeId(instanceId)
+  const cfgPath = path.join(instanceRoot(host.dataDir, id), "instance.cfg")
+  if (!(await exists(cfgPath))) throw new Error("Сборка в папке ElyPrism не найдена.")
+  const key = instanceIconKey(id)
+  const current = parseIni(await fs.readFile(cfgPath, "utf8")).iconKey?.trim() || ""
+  if (current === key) await removeOwnedIcons(path.join(host.dataDir, "icons"), key)
+  const original = await fs.readFile(cfgPath, "utf8")
+  await fs.writeFile(cfgPath, patchIni(original, { iconKey: "default" }), "utf8")
+}
+
+async function iconIndex(dataDir: string): Promise<Map<string, { file: string; mtime: number }>> {
+  const dir = path.join(dataDir, "icons")
+  const map = new Map<string, { file: string; mtime: number }>()
+  if (!(await exists(dir))) return map
+  const names = await fs.readdir(dir)
+  for (const name of names) {
+    if (!/\.(png|jpe?g|webp|gif)$/i.test(name) || name.includes("..")) continue
+    const key = name.replace(/\.[^.]+$/, "")
+    if (!key) continue
+    const file = path.join(dir, name)
+    const stat = await fs.stat(file).catch(() => null)
+    if (!stat?.isFile()) continue
+    const current = map.get(key)
+    if (!current || name.toLowerCase().endsWith(".png")) map.set(key, { file, mtime: Math.round(stat.mtimeMs) })
+  }
+  return map
+}
+
+function iconFile(iconsDir: string, name: string): string {
+  const target = path.resolve(iconsDir, name)
+  const root = path.resolve(iconsDir)
+  if (target !== path.join(root, name)) throw new Error("Картинка записана в неожиданном виде.")
+  return target
+}
+
+async function removeOwnedIcons(iconsDir: string, key: string): Promise<void> {
+  if (!key.startsWith("up-") || !(await exists(iconsDir))) return
+  const names = await fs.readdir(iconsDir)
+  await Promise.all(names.filter((name) => name.replace(/\.[^.]+$/, "") === key).map((name) => fs.rm(iconFile(iconsDir, name), { force: true })))
 }
 
 function importArgument(source: string, executable: string): string {

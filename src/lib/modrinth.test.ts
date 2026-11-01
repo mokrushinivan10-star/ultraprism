@@ -24,6 +24,7 @@ import {
   installModFiles,
   installModpack,
   prepareDownloadUrl,
+  unpackZipArchive,
   type FetchFn,
   type FileDownload,
 } from "@/lib/modrinth-install"
@@ -301,4 +302,62 @@ describe("modrinth catalog", () => {
     expect(() => packDocument({ minecraft: "1.21.1", quilt: "0.1" })).toThrow(/неподдерживаемого/)
     expect(await commitInstance(dir, await fs.mkdtemp(path.join(dir, "stage-")), "Река")).toBe("Река 3")
   })
+
+  it("unpacks a CurseForge zip that stores real sizes in a zip64 extra field", () => {
+    const entries = unpackZipArchive(zipWithZip64Sentinel("manifest.json", "hi"))
+    expect(new TextDecoder().decode(entries.get("manifest.json"))).toBe("hi")
+  })
 })
+
+function zipWithZip64Sentinel(name: string, text: string): Uint8Array {
+  const file = new TextEncoder().encode(text)
+  const filename = new TextEncoder().encode(name)
+  const local = new Uint8Array(30 + filename.length + file.length)
+  writeU32(local, 0, 0x04034b50)
+  writeU16(local, 26, filename.length)
+  writeU32(local, 18, file.length)
+  writeU32(local, 22, file.length)
+  local.set(filename, 30)
+  local.set(file, 30 + filename.length)
+  const extra = new Uint8Array(4 + 24)
+  writeU16(extra, 0, 1)
+  writeU16(extra, 2, 24)
+  writeU64(extra, 4, file.length)
+  writeU64(extra, 12, file.length)
+  writeU64(extra, 20, 0)
+  const central = new Uint8Array(46 + filename.length + extra.length)
+  writeU32(central, 0, 0x02014b50)
+  writeU32(central, 20, 0xffffffff)
+  writeU32(central, 24, 0xffffffff)
+  writeU16(central, 28, filename.length)
+  writeU16(central, 30, extra.length)
+  writeU32(central, 42, 0)
+  central.set(filename, 46)
+  central.set(extra, 46 + filename.length)
+  const eocd = new Uint8Array(22)
+  writeU32(eocd, 0, 0x06054b50)
+  writeU16(eocd, 8, 1)
+  writeU16(eocd, 10, 1)
+  writeU32(eocd, 12, central.length)
+  writeU32(eocd, 16, local.length)
+  const zip = new Uint8Array(local.length + central.length + eocd.length)
+  zip.set(local, 0)
+  zip.set(central, local.length)
+  zip.set(eocd, local.length + central.length)
+  return zip
+}
+
+function writeU16(data: Uint8Array, offset: number, value: number) {
+  data[offset] = value & 0xff
+  data[offset + 1] = (value >>> 8) & 0xff
+}
+
+function writeU32(data: Uint8Array, offset: number, value: number) {
+  writeU16(data, offset, value & 0xffff)
+  writeU16(data, offset + 2, (value >>> 16) & 0xffff)
+}
+
+function writeU64(data: Uint8Array, offset: number, value: number) {
+  writeU32(data, offset, value)
+  writeU32(data, offset + 4, 0)
+}

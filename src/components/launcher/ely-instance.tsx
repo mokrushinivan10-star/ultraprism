@@ -1,8 +1,8 @@
 "use client"
 
 import Image from "next/image"
-import { useState } from "react"
-import { ArrowLeft, Copy, FolderOpen, Square } from "lucide-react"
+import { useRef, useState } from "react"
+import { ArrowLeft, Copy, FolderOpen, ImagePlus, Square } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -74,19 +74,27 @@ export function ElyInstanceView({ onPlay, onCatalog }: { onPlay: () => void; onC
         </div>
       </div>
 
-      <div>
-        <h1 className="text-2xl font-medium tracking-tight">{instance.name}</h1>
-        <p className="mt-1 text-sm text-[var(--up-muted)]">
-          {instance.version} · {LOADER_LABEL[instance.loader]}
-          {instance.loaderVersion ? ` ${instance.loaderVersion}` : ""} · играли {formatWhen(played, "ещё не запускали")} · в игре {playTime(instance.totalTimePlayed)}
-        </p>
-        {instance.managedName && (
-          <p className="mt-1 text-sm text-[var(--up-muted)]">
-            Модпак {instance.managedName}
-            {instance.managedVersion ? ` · ${instance.managedVersion}` : ""}
-          </p>
-        )}
-      </div>
+        <div className="flex items-start gap-3">
+          <InstancePicture
+            instanceId={selectedId}
+            hasIcon={instance.hasIcon}
+            stamp={instance.iconStamp}
+            onChanged={() => void select(selectedId)}
+          />
+          <div className="min-w-0">
+            <h1 className="text-2xl font-medium tracking-tight">{instance.name}</h1>
+            <p className="mt-1 text-sm text-[var(--up-muted)]">
+              {instance.version} · {LOADER_LABEL[instance.loader]}
+              {instance.loaderVersion ? ` ${instance.loaderVersion}` : ""} · играли {formatWhen(played, "ещё не запускали")} · в игре {playTime(instance.totalTimePlayed)}
+            </p>
+            {instance.managedName && (
+              <p className="mt-1 text-sm text-[var(--up-muted)]">
+                Модпак {instance.managedName}
+                {instance.managedVersion ? ` · ${instance.managedVersion}` : ""}
+              </p>
+            )}
+          </div>
+        </div>
 
       <Tabs defaultValue="overview">
         <TabsList className="flex h-auto w-full flex-wrap">
@@ -423,6 +431,87 @@ function Logs({ instanceId, logs }: { instanceId: string; logs: { file: string; 
           {text || "Журнал пуст."}
         </pre>
       )}
+    </div>
+  )
+}
+
+function InstancePicture({
+  instanceId,
+  hasIcon,
+  stamp,
+  onChanged,
+}: {
+  instanceId: string
+  hasIcon: boolean
+  stamp: number
+  onChanged: () => void
+}) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const src = hasIcon ? `/api/elyprism/icon?instance=${encodeURIComponent(instanceId)}&v=${stamp || 0}` : ""
+
+  async function send(file: File | null) {
+    if (file && file.size > 2_000_000) {
+      toast.error("Картинка больше 2 МБ.")
+      return
+    }
+    setBusy(true)
+    try {
+      let response: Response
+      if (file) {
+        const body = new FormData()
+        body.set("instance", instanceId)
+        body.set("file", file)
+        response = await fetch("/api/elyprism/icon", { method: "POST", body })
+      } else {
+        response = await fetch(`/api/elyprism/icon?instance=${encodeURIComponent(instanceId)}`, { method: "DELETE" })
+      }
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null
+      if (!response.ok) {
+        toast.error(payload?.message || (file ? "Картинка не сохранилась." : "Картинка не убралась."))
+        return
+      }
+      toast.success(payload?.message || (file ? "Картинка поставлена на сборку." : "С карточки убрана своя картинка."))
+      onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex shrink-0 flex-col items-start gap-1.5">
+      <button
+        type="button"
+        className="flex size-14 items-center justify-center overflow-hidden rounded-xl border border-[var(--up-border)] bg-[var(--up-surface)] bg-cover bg-center text-[var(--up-muted)]"
+        style={src ? { backgroundImage: `url(${JSON.stringify(src)})` } : undefined}
+        aria-label={hasIcon ? `Сменить картинку сборки` : "Поставить свою картинку"}
+        title="Поставить свою картинку"
+        disabled={busy}
+        onClick={() => fileRef.current?.click()}
+      >
+        {src ? null : <ImagePlus className="size-5" />}
+      </button>
+      <div className="flex gap-1">
+        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
+          {hasIcon ? "Сменить" : "Картинка"}
+        </Button>
+        {hasIcon && (
+          <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => void send(null)}>
+            Убрать
+          </Button>
+        )}
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.target.value = ""
+          if (file) void send(file)
+        }}
+      />
     </div>
   )
 }

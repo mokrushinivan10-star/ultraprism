@@ -27,11 +27,12 @@ import {
   type RemoteFile,
 } from "@/lib/modrinth"
 
-const ARCHIVE_LIMIT = 80 * 1024 * 1024
+const ARCHIVE_LIMIT = 1024 * 1024 * 1024
 const FILE_LIMIT = 250 * 1024 * 1024
-const UNPACKED_LIMIT = 512 * 1024 * 1024
-const ENTRY_LIMIT = 80 * 1024 * 1024
-const FILE_COUNT_LIMIT = 5000
+const UNPACKED_LIMIT = 2 * 1024 * 1024 * 1024
+const ENTRY_LIMIT = 1024 * 1024 * 1024
+const FILE_COUNT_LIMIT = 20_000
+const ZIP64_SENTINEL = 0xffffffff
 const DEPENDENCY_LIMIT = 40
 
 export type LookupFn = (hostname: string) => Promise<Array<{ address: string }>>
@@ -411,14 +412,109 @@ async function hashFile(file: string, algorithm: "sha512" | "sha1"): Promise<str
   return hash.digest("hex")
 }
 
+export function normalizeZip64(archive: Uint8Array): Uint8Array {
+  if (archive.byteLength < 22) return archive
+  const eocd = findEocd(archive)
+  if (eocd < 0) return archive
+  const count = readU16(archive, eocd + 8)
+  const offset = readU32(archive, eocd + 16)
+  if (count === 0xffff || offset === ZIP64_SENTINEL) return archive
+  const copy = archive.slice()
+  let cursor = offset
+  for (let index = 0; index < count; index += 1) {
+    if (cursor + 46 > copy.length || readU32(copy, cursor) !== 0x02014b50) break
+    const compressed = readU32(copy, cursor + 20)
+    const uncompressed = readU32(copy, cursor + 24)
+    const localOffset = readU32(copy, cursor + 42)
+    const nameLen = readU16(copy, cursor + 28)
+    const extraLen = readU16(copy, cursor + 30)
+    const commentLen = readU16(copy, cursor + 32)
+    const extra = cursor + 46 + nameLen
+    if ((compressed === ZIP64_SENTINEL || uncompressed === ZIP64_SENTINEL || localOffset === ZIP64_SENTINEL) && extraLen > 0) {
+      const sizes = readZip64Extra(copy, extra, extra + extraLen, uncompressed === ZIP64_SENTINEL, compressed === ZIP64_SENTINEL, localOffset === ZIP64_SENTINEL)
+      if (sizes?.compressed !== undefined && sizes.compressed < ZIP64_SENTINEL) writeU32(copy, cursor + 20, sizes.compressed)
+      if (sizes?.uncompressed !== undefined && sizes.uncompressed < ZIP64_SENTINEL) writeU32(copy, cursor + 24, sizes.uncompressed)
+      if (sizes?.offset !== undefined && sizes.offset < ZIP64_SENTINEL) writeU32(copy, cursor + 42, sizes.offset)
+    }
+    cursor += 46 + nameLen + extraLen + commentLen
+  }
+  return copy
+}
+
+function findEocd(data: Uint8Array): number {
+  const start = Math.max(0, data.length - 22 - 65535)
+  for (let index = data.length - 22; index >= start; index -= 1) {
+    if (readU32(data, index) === 0x06054b50) return index
+  }
+  return -1
+}
+
+function readZip64Extra(
+  data: Uint8Array,
+  start: number,
+  end: number,
+  needUncompressed: boolean,
+  needCompressed: boolean,
+  needOffset: boolean,
+): { uncompressed?: number; compressed?: number; offset?: number } | null {
+  let cursor = start
+  while (cursor + 4 <= end) {
+    const id = readU16(data, cursor)
+    const size = readU16(data, cursor + 2)
+    const body = cursor + 4
+    if (body + size > end) return null
+    if (id === 1) {
+      let point = body
+      const sizes: { uncompressed?: number; compressed?: number; offset?: number } = {}
+      if (needUncompressed) {
+        if (point + 8 > body + size) return null
+        sizes.uncompressed = readU64(data, point)
+        point += 8
+      }
+      if (needCompressed) {
+        if (point + 8 > body + size) return null
+        sizes.compressed = readU64(data, point)
+        point += 8
+      }
+      if (needOffset) {
+        if (point + 8 > body + size) return null
+        sizes.offset = readU64(data, point)
+      }
+      return sizes
+    }
+    cursor = body + size
+  }
+  return null
+}
+
+function readU16(data: Uint8Array, offset: number): number {
+  return data[offset] + data[offset + 1] * 256
+}
+
+function readU32(data: Uint8Array, offset: number): number {
+  return data[offset] + data[offset + 1] * 256 + data[offset + 2] * 65536 + data[offset + 3] * 16777216
+}
+
+function readU64(data: Uint8Array, offset: number): number {
+  return readU32(data, offset) + readU32(data, offset + 4) * 0x100000000
+}
+
+function writeU32(data: Uint8Array, offset: number, value: number): void {
+  data[offset] = value & 0xff
+  data[offset + 1] = (value >>> 8) & 0xff
+  data[offset + 2] = (value >>> 16) & 0xff
+  data[offset + 3] = (value >>> 24) & 0xff
+}
+
 export function unpackZipArchive(archive: Uint8Array): Map<string, Uint8Array> {
-  if (archive.byteLength > ARCHIVE_LIMIT) throw new CatalogError("Архив сборки слишком большой.")
+  const source = normalizeZip64(archive)
+  if (source.byteLength > ARCHIVE_LIMIT) throw new CatalogError("Архив сборки слишком большой.")
   let declared = 0
   let count = 0
   let tooBig = false
   let files: Record<string, Uint8Array>
   try {
-    files = unzipSync(archive, {
+    files = unzipSync(source, {
       filter(file) {
         if (file.name.endsWith("/")) return false
         count += 1

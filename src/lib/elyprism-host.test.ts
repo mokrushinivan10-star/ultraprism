@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import { buildLaunchArgs, parseAccounts, patchIni, toWindowsPath } from "@/lib/elyprism-model"
-import { inspectHost, performAction, readInstance } from "@/lib/elyprism-host"
+import { clearInstanceIcon, inspectHost, performAction, readInstance, readInstanceIcon, saveInstanceIcon } from "@/lib/elyprism-host"
 
 const roots: string[] = []
 
@@ -141,6 +141,42 @@ describe("elyprism host", () => {
     })
     expect(host.found).toBe(true)
     expect(host.dataDir).toBe(data)
+  })
+
+  it("puts a picture on the instance card and clears only that file", async () => {
+    const { root, env } = await fixture()
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    )
+    await saveInstanceIcon("Тихий берег", png, env)
+    const host = await inspectHost(env)
+    expect(host.instances[0]?.hasIcon).toBe(true)
+    const image = await readInstanceIcon(root, "Тихий берег")
+    expect(image?.type).toBe("image/png")
+    expect(image?.body.equals(png)).toBe(true)
+    const cfgPath = path.join(root, "instances", "Тихий берег", "instance.cfg")
+    const cfg = await fs.readFile(cfgPath, "utf8")
+    expect(cfg).toContain("iconKey=up-Тихий берег")
+    expect(cfg).toContain("CustomKey=keep")
+    await saveInstanceIcon("Тихий берег", Buffer.from([0xff, 0xd8, 0xff, 0xd9]), env)
+    expect(await fs.readdir(path.join(root, "icons"))).toEqual(["up-Тихий берег.jpg"])
+
+    await fs.writeFile(path.join(root, "icons", "flame.png"), png)
+    const current = await fs.readFile(cfgPath, "utf8")
+    await fs.writeFile(cfgPath, current.replace("iconKey=up-Тихий берег", "iconKey=flame"), "utf8")
+    await clearInstanceIcon("Тихий берег", env)
+    expect(await fs.readFile(path.join(root, "icons", "flame.png"))).toEqual(png)
+    expect(await fs.readFile(cfgPath, "utf8")).toContain("iconKey=default")
+    expect((await fs.readdir(path.join(root, "icons"))).sort()).toEqual(["flame.png", "up-Тихий берег.jpg"])
+
+    await saveInstanceIcon("Тихий берег", png, env)
+    await clearInstanceIcon("Тихий берег", env)
+    expect(await fs.readdir(path.join(root, "icons"))).toEqual(["flame.png"])
+    const cleared = await inspectHost(env)
+    expect(cleared.instances[0]?.hasIcon).toBe(false)
+    await expect(saveInstanceIcon("Тихий берег", Buffer.from("not-an-image"), env)).rejects.toThrow(/PNG/)
+    await expect(saveInstanceIcon("../accounts.json", png, env)).rejects.toThrow()
   })
 
   it("creates a vanilla instance", async () => {

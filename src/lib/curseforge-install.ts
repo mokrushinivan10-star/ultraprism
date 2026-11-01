@@ -21,7 +21,7 @@ import {
 } from "@/lib/curseforge"
 
 const FILE_LIMIT = 250 * 1024 * 1024
-const ARCHIVE_LIMIT = 80 * 1024 * 1024
+const ARCHIVE_LIMIT = 1024 * 1024 * 1024
 
 export async function curseforgeConfigured(): Promise<boolean> {
   try {

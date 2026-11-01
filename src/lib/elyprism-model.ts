@@ -53,6 +53,8 @@ export type ElyInstanceSummary = {
   group: string
   notes: string
   iconKey: string
+  hasIcon: boolean
+  iconStamp: number
   lastLaunchTime: number | null
   totalTimePlayed: number
   minMem: number | null
@@ -442,6 +444,9 @@ export function toCard(instance: ElyInstanceSummary): Instance {
     loader: instance.loader,
     group: instance.group,
     icon: iconFor(instance.iconKey, instance.id),
+    imageUrl: instance.hasIcon
+      ? `/api/elyprism/icon?instance=${encodeURIComponent(instance.id)}&v=${instance.iconStamp || 0}`
+      : null,
     accent: null,
     notes: instance.notes,
     favorite: false,

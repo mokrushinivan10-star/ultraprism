@@ -47,6 +47,24 @@ export function ElyLibrary({
     return (b.lastLaunchTime ?? 0) - (a.lastLaunchTime ?? 0)
   })
 
+  async function pickImage(instanceId: string, file: File) {
+    if (file.size > 2_000_000) {
+      toast.error("Картинка больше 2 МБ.")
+      return
+    }
+    const body = new FormData()
+    body.set("instance", instanceId)
+    body.set("file", file)
+    const response = await fetch("/api/elyprism/icon", { method: "POST", body })
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null
+    if (!response.ok) {
+      toast.error(payload?.message || "Картинка не сохранилась.")
+      return
+    }
+    toast.success(payload?.message || "Картинка поставлена на сборку.")
+    await refresh()
+  }
+
   async function act(action: Parameters<typeof run>[0]) {
     const result = await run(action)
     if (result.ok) toast.success(result.message)
@@ -163,6 +181,7 @@ export function ElyLibrary({
               delay={Math.min(index, 8) * (theme.motion === "expressive" ? 70 : 40)}
               onOpen={() => onOpen(instance.id)}
               onPlay={() => onPlay(instance.id)}
+              onPickImage={(file) => void pickImage(instance.id, file)}
             />
           ))}
         </div>
