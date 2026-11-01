@@ -59,6 +59,10 @@ function exclusive<T>(task: () => Promise<T>): Promise<T> {
   return run
 }
 
+export function withHostLock<T>(task: () => Promise<T>): Promise<T> {
+  return exclusive(task)
+}
+
 function defaultSpawn(exe: string, args: string[]): Promise<{ pid: number }> {
   return new Promise((resolve, reject) => {
     const child = spawn(exe, args, { detached: true, stdio: "ignore" })

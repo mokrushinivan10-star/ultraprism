@@ -28,7 +28,7 @@ import type {
 } from "@/lib/types"
 import { detachInstance, removeWorldCard, sealWorlds } from "@/lib/worlds-guard"
 
-export type Screen = View | "instance"
+export type Screen = View | "instance" | "catalog"
 
 type State = {
   theme: UltraTheme

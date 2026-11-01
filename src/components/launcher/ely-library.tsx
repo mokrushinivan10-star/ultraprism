@@ -1,6 +1,6 @@
 "use client"
 
-import { FolderOpen, Plus, RefreshCw, Settings, Upload } from "lucide-react"
+import { FolderOpen, PackageSearch, Plus, RefreshCw, Settings, Upload } from "lucide-react"
 import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -22,12 +22,14 @@ export function ElyLibrary({
   onCreate,
   onImport,
   onSettings,
+  onCatalog,
 }: {
   onPlay: (id: string) => void
   onOpen: (id: string) => void
   onCreate: () => void
   onImport: () => void
   onSettings: () => void
+  onCatalog: () => void
 }) {
   const { state, dispatch, query } = useLauncher()
   const { status, busy, refresh, run } = useElyHost()
@@ -65,6 +67,10 @@ export function ElyLibrary({
           <Button type="button" variant="outline" disabled={busy} onClick={() => void refresh().then(() => toast.success("Список сборок обновлён."))}>
             <RefreshCw data-icon="inline-start" />
             Обновить
+          </Button>
+          <Button type="button" variant="outline" onClick={onCatalog}>
+            <PackageSearch data-icon="inline-start" />
+            Каталог
           </Button>
           <Button type="button" onClick={onCreate}>
             <Plus data-icon="inline-start" />
@@ -137,7 +143,7 @@ export function ElyLibrary({
         <Empty className="mt-8 border">
           <EmptyHeader>
             <EmptyTitle>Сборок пока нет</EmptyTitle>
-            <EmptyDescription>Создайте пустую сборку или откройте мастер ElyPrism для модпака.</EmptyDescription>
+            <EmptyDescription>Создайте пустую сборку или поставьте модпак из каталога Modrinth.</EmptyDescription>
           </EmptyHeader>
           <Button type="button" onClick={onCreate}>
             Новая сборка

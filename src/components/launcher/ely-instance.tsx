@@ -23,7 +23,7 @@ const UID_LABEL: Record<string, string> = {
   "net.neoforged": "NeoForge",
 }
 
-export function ElyInstanceView({ onPlay }: { onPlay: () => void }) {
+export function ElyInstanceView({ onPlay, onCatalog }: { onPlay: () => void; onCatalog: () => void }) {
   const { dispatch } = useLauncher()
   const { status, selectedId, detail, busy, run, select, accountArgs } = useElyHost()
   const summary = status?.instances.find((item) => item.id === selectedId) ?? null
@@ -127,7 +127,12 @@ export function ElyInstanceView({ onPlay }: { onPlay: () => void }) {
           <ModList title="Моды" files={detail?.mods ?? []} instanceId={selectedId} />
           <ModList title="Моды ядра" files={detail?.coreMods ?? []} instanceId={selectedId} toggle={false} />
           <ModList title="Nilmods" files={detail?.nilMods ?? []} instanceId={selectedId} toggle={false} />
-          <p className="mt-3 text-xs text-[var(--up-muted)]">Скачивание с CurseForge и Modrinth открывается кнопкой «Окно ElyPrism».</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" onClick={onCatalog}>
+              Найти на Modrinth
+            </Button>
+            <p className="text-xs text-[var(--up-muted)]">CurseForge по-прежнему открывается кнопкой «Окно ElyPrism».</p>
+          </div>
         </TabsContent>
         <TabsContent value="worlds" className="mt-4 grid gap-2">
           {(detail?.worlds.length ?? 0) === 0 && <p className="text-sm text-[var(--up-muted)]">В папке saves миров пока нет.</p>}

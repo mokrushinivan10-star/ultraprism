@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useRef, useState, type CSSProperties } from "react"
+import { Fragment, useEffect, useRef, useState, type CSSProperties } from "react"
 import {
   BookOpen,
   LayoutGrid,
   Menu,
   Mountain,
+  PackageSearch,
   Palette,
   Search,
   UserRound,
@@ -23,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { AccountsView } from "@/components/launcher/accounts-view"
+import { CatalogView, type CatalogSeed } from "@/components/launcher/catalog-view"
 import { CreateInstanceDialog, LaunchDialog } from "@/components/launcher/dialogs"
 import { ElyCreateDialog, ElyImportDialog, ElySettingsDialog } from "@/components/launcher/ely-dialogs"
 import { accountLabel, useElyHost } from "@/components/launcher/ely-host"
@@ -57,6 +59,8 @@ export function LauncherApp() {
   const [importOpen, setImportOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [catalogSeed, setCatalogSeed] = useState<CatalogSeed | null>(null)
+  const [catalogKey, setCatalogKey] = useState(0)
   const searchRef = useRef<HTMLInputElement>(null)
   const { theme, library, screen } = state
   const dark = isDarkTheme(theme)
@@ -147,6 +151,13 @@ export function LauncherApp() {
     setMenuOpen(false)
   }
 
+  function openCatalog(seed?: CatalogSeed) {
+    setCatalogSeed(seed ?? null)
+    setCatalogKey((value) => value + 1)
+    dispatch({ type: "screen", screen: "catalog" })
+    setMenuOpen(false)
+  }
+
   const background =
     theme.background === "mesh"
       ? "up-bg-mesh"
@@ -192,6 +203,8 @@ export function LauncherApp() {
             screen={screen}
             icons={theme.sidebarMode === "icons"}
             onGo={go}
+            catalogActive={screen === "catalog"}
+            onCatalog={() => openCatalog()}
           />
         </aside>
 
@@ -210,7 +223,7 @@ export function LauncherApp() {
                 className="pl-7"
                 onChange={(event) => {
                   setQuery(event.target.value)
-                  if (event.target.value && screen !== "library" && screen !== "instance") {
+                  if (event.target.value && screen !== "library" && screen !== "instance" && screen !== "catalog") {
                     dispatch({ type: "screen", screen: "library" })
                   }
                 }}
@@ -270,6 +283,7 @@ export function LauncherApp() {
                   onCreate={() => setCreateOpen(true)}
                   onImport={() => setImportOpen(true)}
                   onSettings={() => setSettingsOpen(true)}
+                  onCatalog={() => openCatalog()}
                 />
               )}
               {screen === "library" && !host.loading && !host.status?.found && (
@@ -279,7 +293,30 @@ export function LauncherApp() {
               {screen === "worlds" && <WorldsView />}
               {screen === "accounts" && <AccountsView />}
               {screen === "guide" && <GuideView />}
-              {screen === "instance" && host.status?.found && <ElyInstanceView onPlay={() => openPlay()} />}
+              {screen === "catalog" && (
+                <CatalogView
+                  key={catalogKey}
+                  seed={catalogSeed}
+                  onOpenInstance={(id) => {
+                    host.select(id)
+                    dispatch({ type: "screen", screen: "instance" })
+                  }}
+                />
+              )}
+              {screen === "instance" && host.status?.found && (
+                <ElyInstanceView
+                  onPlay={() => openPlay()}
+                  onCatalog={() => {
+                    const current = host.status?.instances.find((item) => item.id === host.selectedId)
+                    openCatalog({
+                      type: "mod",
+                      version: current?.version,
+                      loader: current?.loader,
+                      instanceId: current?.id,
+                    })
+                  }}
+                />
+              )}
               {screen === "instance" && !host.status?.found && <InstanceView onPlay={() => openPlay()} />}
             </div>
           </main>
@@ -318,7 +355,7 @@ export function LauncherApp() {
           <SheetHeader>
             <SheetTitle>UltraPrism</SheetTitle>
           </SheetHeader>
-          <SidebarBody order={library.navOrder} screen={screen} icons={false} onGo={go} />
+          <SidebarBody order={library.navOrder} screen={screen} icons={false} onGo={go} catalogActive={screen === "catalog"} onCatalog={() => openCatalog()} />
         </SheetContent>
       </Sheet>
     </div>
@@ -330,11 +367,15 @@ function SidebarBody({
   screen,
   icons,
   onGo,
+  catalogActive,
+  onCatalog,
 }: {
   order: View[]
-  screen: View | "instance"
+  screen: View | "instance" | "catalog"
   icons: boolean
   onGo: (view: View) => void
+  catalogActive: boolean
+  onCatalog: () => void
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -352,18 +393,32 @@ function SidebarBody({
           const Icon = NAV_ICON[view]
           const active = screen === view || (view === "library" && screen === "instance")
           return (
-            <Button
-              key={view}
-              type="button"
-              variant={active ? "secondary" : "ghost"}
-              title={NAV_LABEL[view]}
-              onClick={() => onGo(view)}
-              data-active={active ? "true" : "false"}
-              className={cn("up-nav w-full justify-start", icons && "justify-center px-0")}
-            >
-              <Icon className="size-4 shrink-0" />
-              {!icons && NAV_LABEL[view]}
-            </Button>
+            <Fragment key={view}>
+              <Button
+                type="button"
+                variant={active ? "secondary" : "ghost"}
+                title={NAV_LABEL[view]}
+                onClick={() => onGo(view)}
+                data-active={active ? "true" : "false"}
+                className={cn("up-nav w-full justify-start", icons && "justify-center px-0")}
+              >
+                <Icon className="size-4 shrink-0" />
+                {!icons && NAV_LABEL[view]}
+              </Button>
+              {view === "library" && (
+                <Button
+                  type="button"
+                  variant={catalogActive ? "secondary" : "ghost"}
+                  title="Каталог"
+                  onClick={onCatalog}
+                  data-active={catalogActive ? "true" : "false"}
+                  className={cn("up-nav w-full justify-start", icons && "justify-center px-0")}
+                >
+                  <PackageSearch className="size-4 shrink-0" />
+                  {!icons && "Каталог"}
+                </Button>
+              )}
+            </Fragment>
           )
         })}
       </nav>
