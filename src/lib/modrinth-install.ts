@@ -245,7 +245,7 @@ export async function installModpack(options: {
 }): Promise<{ instanceId: string; fileCount: number }> {
   const projectId = assertModrinthId(options.projectId, "Номер проекта")
   const versionId = assertModrinthId(options.versionId, "Номер версии")
-  const entries = unpackArchive(options.archive)
+  const entries = unpackZipArchive(options.archive)
   const indexEntry = findIndex(entries)
   const indexText = new TextDecoder().decode(entries.get(indexEntry) ?? new Uint8Array())
   const parsed = parseIndex(indexText, options.includeOptional)
@@ -411,7 +411,7 @@ async function hashFile(file: string, algorithm: "sha512" | "sha1"): Promise<str
   return hash.digest("hex")
 }
 
-function unpackArchive(archive: Uint8Array): Map<string, Uint8Array> {
+export function unpackZipArchive(archive: Uint8Array): Map<string, Uint8Array> {
   if (archive.byteLength > ARCHIVE_LIMIT) throw new CatalogError("Архив сборки слишком большой.")
   let declared = 0
   let count = 0

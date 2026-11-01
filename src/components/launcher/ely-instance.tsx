@@ -129,9 +129,9 @@ export function ElyInstanceView({ onPlay, onCatalog }: { onPlay: () => void; onC
           <ModList title="Nilmods" files={detail?.nilMods ?? []} instanceId={selectedId} toggle={false} />
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button type="button" size="sm" onClick={onCatalog}>
-              Найти на Modrinth
+              Найти в каталоге
             </Button>
-            <p className="text-xs text-[var(--up-muted)]">CurseForge по-прежнему открывается кнопкой «Окно ElyPrism».</p>
+            <p className="text-xs text-[var(--up-muted)]">Modrinth и CurseForge ищутся здесь, без окна ElyPrism.</p>
           </div>
         </TabsContent>
         <TabsContent value="worlds" className="mt-4 grid gap-2">

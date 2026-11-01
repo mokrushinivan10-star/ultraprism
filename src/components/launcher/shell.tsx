@@ -36,7 +36,7 @@ import { InstanceView } from "@/components/launcher/instance-view"
 import { LibraryView } from "@/components/launcher/library-view"
 import { StudioView } from "@/components/launcher/studio-view"
 import { WorldsView } from "@/components/launcher/worlds-view"
-import { countLabel, TIME_ZONE_LABEL } from "@/lib/format"
+import { countLabel, formatClock } from "@/lib/format"
 import { NAV_LABEL } from "@/lib/labels"
 import { useLauncher } from "@/lib/launcher-context"
 import { isDarkTheme, sanitizeCss, themeStyle } from "@/lib/theme"
@@ -334,7 +334,7 @@ export function LauncherApp() {
               </span>
               <span>{countLabel(library.worlds.length, "карточка мира", "карточки миров", "карточек миров")} · тема их не пишет</span>
               <span className="truncate">Тема: {theme.name}</span>
-              <span className="ml-auto shrink-0">время: {TIME_ZONE_LABEL}</span>
+              <ZoneClock />
             </footer>
           )}
         </div>
@@ -360,6 +360,20 @@ export function LauncherApp() {
       </Sheet>
     </div>
   )
+}
+
+function ZoneClock() {
+  const [text, setText] = useState("")
+  useEffect(() => {
+    const update = () => setText(formatClock(new Date()))
+    const first = window.setTimeout(update, 0)
+    const id = window.setInterval(update, 30_000)
+    return () => {
+      window.clearTimeout(first)
+      window.clearInterval(id)
+    }
+  }, [])
+  return <span className="ml-auto shrink-0 font-sans tabular-nums">{text ? `время: ${text}` : "время"}</span>
 }
 
 function SidebarBody({

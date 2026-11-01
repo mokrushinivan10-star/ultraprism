@@ -37,12 +37,13 @@ export function InstanceCard({
   const accent = instance.accent || theme.colors.accent
   const list = theme.cards === "list"
   return (
+    <div className={cn("@container/instance min-w-0 w-full", featured && theme.cards === "mosaic" && "sm:col-span-2 sm:row-span-2")}>
     <Card
       size={theme.density === "roomy" ? "default" : "sm"}
       className={cn(
-        "up-card cursor-pointer",
-        list && "flex-row items-center",
-        featured && theme.cards === "mosaic" && "sm:col-span-2 sm:row-span-2",
+        "up-card h-full cursor-pointer",
+        list && "flex-row items-center pb-(--card-spacing)!",
+        list && "@max-[34rem]/instance:flex-col @max-[34rem]/instance:items-stretch",
       )}
       style={{ ...cardStyle(theme, accent), animationDelay: `${delay}ms` }}
       onClick={onOpen}
@@ -55,16 +56,14 @@ export function InstanceCard({
         }
       }}
     >
-      <CardHeader className={cn(list && "flex-1")}>
-        <div className="flex items-start gap-3">
-          <InstanceIcon icon={instance.icon} accent={accent} className={featured && !list ? "size-14" : "size-10"} />
-          <div className="min-w-0">
-            <CardTitle className={cn("truncate", featured && !list && "text-xl")}>{instance.name}</CardTitle>
-            <CardDescription className="truncate">{instance.group || "Без группы"}</CardDescription>
-          </div>
+      <CardHeader className={cn("flex min-w-0 flex-row items-center gap-3 overflow-hidden", list && "flex-1 @max-[34rem]/instance:flex-none")}>
+        <InstanceIcon icon={instance.icon} accent={accent} className={cn("shrink-0 self-center", featured && !list ? "size-14" : "size-10")} />
+        <div className="min-w-0">
+          <CardTitle className={cn("truncate", featured && !list && "text-xl")}>{instance.name}</CardTitle>
+          <p className="truncate text-sm text-muted-foreground">{instance.group || "Без группы"}</p>
         </div>
       </CardHeader>
-      <CardContent className={cn("grid gap-2", list && "py-0")}>
+      <CardContent className={cn("grid min-w-0 gap-2", list && "shrink-0 py-0 @max-[34rem]/instance:shrink @max-[34rem]/instance:py-0")}>
         <div className="flex flex-wrap items-center gap-1.5">
           {theme.chrome.versionChip && (
             <Badge variant="outline" className="font-mono">
@@ -80,7 +79,7 @@ export function InstanceCard({
         <p className="text-xs text-muted-foreground">Играли: {formatWhen(instance.lastPlayed, "ещё не запускали")}</p>
       </CardContent>
       <CardFooter
-        className={cn(list && "ml-auto w-auto border-0 bg-transparent")}
+        className={cn(list && "ml-auto w-auto shrink-0 border-0 bg-transparent @max-[34rem]/instance:ml-0 @max-[34rem]/instance:w-full")}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
@@ -100,6 +99,7 @@ export function InstanceCard({
         )}
       </CardFooter>
     </Card>
+    </div>
   )
 }
 

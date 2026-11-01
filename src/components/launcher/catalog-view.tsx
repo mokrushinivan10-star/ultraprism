@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { ExternalLink, PackageSearch } from "lucide-react"
 import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch"
 import { useElyHost } from "@/components/launcher/ely-host"
 import { formatWhen } from "@/lib/format"
 import { LOADER_LABEL } from "@/lib/labels"
+import { cursePage } from "@/lib/curseforge"
 import {
   CATALOG_LOADERS,
   PROJECT_TYPES,
@@ -64,8 +65,21 @@ const VERSION_LABEL: Record<string, string> = {
 
 const counts = new Intl.NumberFormat("ru-RU")
 
+type CatalogSource = "modrinth" | "curseforge"
+
+const SOURCE_LABEL: Record<CatalogSource, string> = {
+  modrinth: "Modrinth",
+  curseforge: "CurseForge",
+}
+
 export function CatalogView({ seed, onOpenInstance }: { seed: CatalogSeed | null; onOpenInstance: (id: string) => void }) {
   const host = useElyHost()
+  const [source, setSource] = useState<CatalogSource>("modrinth")
+  const [keyConfigured, setKeyConfigured] = useState<boolean | null>(null)
+  const [keyDraft, setKeyDraft] = useState("")
+  const [keyError, setKeyError] = useState<string | null>(null)
+  const [savingKey, setSavingKey] = useState(false)
+  const [replacingKey, setReplacingKey] = useState(false)
   const [query, setQuery] = useState("")
   const [projectType, setProjectType] = useState<ProjectType>(seed?.type ?? "mod")
   const [version, setVersion] = useState(usableVersion(seed?.version))
@@ -78,8 +92,19 @@ export function CatalogView({ seed, onOpenInstance }: { seed: CatalogSeed | null
   const [active, setActive] = useState<CatalogHit | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const versionOk = !version.trim() || /^[0-9A-Za-z][0-9A-Za-z._+-]{0,31}$/.test(version.trim())
+  const sourceName = SOURCE_LABEL[source]
+  const curseReady = source !== "curseforge" || keyConfigured === true
 
   const search = useCallback(async (nextOffset: number, replace: boolean) => {
+    if (source === "curseforge" && keyConfigured !== true) {
+      setLoading(false)
+      if (replace) {
+        setHits([])
+        setTotal(0)
+        setError(null)
+      }
+      return
+    }
     const controller = new AbortController()
     abortRef.current?.abort()
     abortRef.current = controller
@@ -94,11 +119,11 @@ export function CatalogView({ seed, onOpenInstance }: { seed: CatalogSeed | null
     if (version.trim()) params.set("version", version.trim())
     if (loader !== "all") params.set("loader", loader)
     try {
-      const response = await fetch(`/api/modrinth/search?${params}`, { signal: controller.signal, cache: "no-store" })
+      const response = await fetch(`/api/${source}/search?${params}`, { signal: controller.signal, cache: "no-store" })
       const body = (await response.json()) as { hits?: CatalogHit[]; total?: number; message?: string }
       if (controller.signal.aborted) return
       if (!response.ok || !Array.isArray(body.hits)) {
-        setError(body.message || "Поиск на Modrinth не удался.")
+        setError(body.message || `Поиск на ${SOURCE_LABEL[source]} не удался.`)
         if (replace) setHits([])
         setTotal(0)
         return
@@ -107,14 +132,53 @@ export function CatalogView({ seed, onOpenInstance }: { seed: CatalogSeed | null
       setTotal(typeof body.total === "number" ? body.total : body.hits.length)
       setOffset(nextOffset)
       setError(null)
-    } catch (caught) {
+    } catch {
       if (controller.signal.aborted) return
-      setError(caught instanceof Error && caught.message ? "Поиск на Modrinth не удался." : "Поиск на Modrinth не удался.")
+      setError(`Поиск на ${SOURCE_LABEL[source]} не удался.`)
       if (replace) setHits([])
     } finally {
       if (!controller.signal.aborted) setLoading(false)
     }
-  }, [loader, projectType, query, version])
+  }, [keyConfigured, loader, projectType, query, source, version])
+
+  useEffect(() => {
+    if (source !== "curseforge") return
+    const controller = new AbortController()
+    void (async () => {
+      try {
+        const response = await fetch("/api/curseforge/key", { signal: controller.signal, cache: "no-store" })
+        const body = (await response.json()) as { configured?: boolean }
+        if (!controller.signal.aborted) setKeyConfigured(body.configured === true)
+      } catch {
+        if (!controller.signal.aborted) setKeyConfigured(false)
+      }
+    })()
+    return () => controller.abort()
+  }, [source])
+
+  async function saveKey(event: FormEvent) {
+    event.preventDefault()
+    const value = keyDraft.trim()
+    if (!value || savingKey) return
+    setSavingKey(true)
+    setKeyError(null)
+    try {
+      const response = await fetch("/api/curseforge/key", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: value }),
+      })
+      const body = (await response.json()) as { configured?: boolean; message?: string }
+      if (!response.ok || body.configured !== true) throw new Error(body.message || "Ключ не сохранился.")
+      setKeyDraft("")
+      setReplacingKey(false)
+      setKeyConfigured(true)
+    } catch (caught) {
+      setKeyError(caught instanceof Error && caught.message ? caught.message : "Ключ не сохранился.")
+    } finally {
+      setSavingKey(false)
+    }
+  }
 
   useEffect(() => {
     if (!versionOk) return
@@ -129,12 +193,61 @@ export function CatalogView({ seed, onOpenInstance }: { seed: CatalogSeed | null
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-4 md:px-6">
       <div>
-        <p className="text-[11px] tracking-[0.16em] text-[var(--up-muted)] uppercase">Modrinth</p>
+        <p className="text-[11px] tracking-[0.16em] text-[var(--up-muted)] uppercase">{sourceName}</p>
         <h1 className="text-2xl font-medium tracking-tight">Каталог</h1>
         <p className="mt-1 max-w-2xl text-sm text-[var(--up-muted)]">
-          Моды, сборки, ресурспаки и шейдеры ставятся в папку ElyPrism прямо отсюда. CurseForge по-прежнему открывается окном ElyPrism: для него нужен отдельный ключ.
+          Моды, сборки, ресурспаки и шейдеры с Modrinth и CurseForge ставятся в папку ElyPrism прямо отсюда. Ключ CurseForge хранится только в настройках ElyPrism на этом компьютере.
         </p>
       </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant={source === "modrinth" ? "secondary" : "outline"} onClick={() => { setSource("modrinth"); setActive(null) }}>
+          Modrinth
+        </Button>
+        <Button type="button" size="sm" variant={source === "curseforge" ? "secondary" : "outline"} onClick={() => { setSource("curseforge"); setActive(null) }}>
+          CurseForge
+        </Button>
+      </div>
+
+      {source === "curseforge" && keyConfigured === null && (
+        <p className="mt-3 text-sm text-[var(--up-muted)]">Проверяем, сохранён ли ключ CurseForge…</p>
+      )}
+      {source === "curseforge" && keyConfigured === true && !replacingKey && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--up-muted)]">
+          <span>Ключ CurseForge записан в настройки ElyPrism.</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => { setReplacingKey(true); setKeyError(null) }}>
+            Заменить ключ
+          </Button>
+        </div>
+      )}
+      {source === "curseforge" && (keyConfigured === false || replacingKey) && (
+        <form className="mt-3 grid max-w-xl gap-2" onSubmit={(event) => void saveKey(event)}>
+          <Label htmlFor="curseforge-key">Ключ CurseForge</Label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              id="curseforge-key"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={keyDraft}
+              placeholder="Ключ организации с console.curseforge.com"
+              onChange={(event) => setKeyDraft(event.target.value)}
+            />
+            <Button type="submit" disabled={savingKey || keyDraft.trim().length < 20}>
+              {savingKey ? "Сохраняем…" : "Сохранить ключ"}
+            </Button>
+            {replacingKey && (
+              <Button type="button" variant="outline" onClick={() => { setReplacingKey(false); setKeyDraft(""); setKeyError(null) }}>
+                Отмена
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-[var(--up-muted)]">
+            Ключ с <a className="underline-offset-4 hover:underline" href="https://console.curseforge.com/" target="_blank" rel="noreferrer">console.curseforge.com</a> запишется в файл настроек ElyPrism и не попадёт в репозиторий.
+          </p>
+          {keyError && <p className="text-xs text-[var(--up-danger,var(--destructive))]">{keyError}</p>}
+        </form>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
         {PROJECT_TYPES.map((type) => (
@@ -148,7 +261,7 @@ export function CatalogView({ seed, onOpenInstance }: { seed: CatalogSeed | null
         <Input
           value={query}
           placeholder={projectType === "modpack" ? "Название сборки" : "Название мода"}
-          aria-label="Поиск на Modrinth"
+          aria-label={`Поиск на ${sourceName}`}
           onChange={(event) => setQuery(event.target.value)}
         />
         <Input
@@ -180,9 +293,9 @@ export function CatalogView({ seed, onOpenInstance }: { seed: CatalogSeed | null
         </Alert>
       )}
 
-      {loading && hits.length === 0 && <p className="mt-6 text-sm text-[var(--up-muted)]">Ищем на Modrinth…</p>}
+      {curseReady && loading && hits.length === 0 && <p className="mt-6 text-sm text-[var(--up-muted)]">Ищем на {sourceName}…</p>}
 
-      {!loading && !error && hits.length === 0 && (
+      {curseReady && !loading && !error && hits.length === 0 && (
         <Empty className="mt-6 border">
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -237,7 +350,8 @@ export function CatalogView({ seed, onOpenInstance }: { seed: CatalogSeed | null
 
       {active && (
         <ProjectDialog
-          key={`${active.id}:${versionOk ? version.trim() : ""}:${loader}:${seed?.instanceId || host.selectedId || ""}`}
+          key={`${source}:${active.id}:${versionOk ? version.trim() : ""}:${loader}:${seed?.instanceId || host.selectedId || ""}`}
+          source={source}
           hit={active}
           versionFilter={versionOk ? version.trim() : ""}
           loaderFilter={loader}
@@ -253,6 +367,7 @@ export function CatalogView({ seed, onOpenInstance }: { seed: CatalogSeed | null
 }
 
 function ProjectDialog({
+  source,
   hit,
   versionFilter,
   loaderFilter,
@@ -260,6 +375,7 @@ function ProjectDialog({
   onOpenChange,
   onOpenInstance,
 }: {
+  source: CatalogSource
   hit: CatalogHit
   versionFilter: string
   loaderFilter: CatalogLoader | "all"
@@ -282,6 +398,7 @@ function ProjectDialog({
   const [installError, setInstallError] = useState<string | null>(null)
   const [doneId, setDoneId] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const sourceName = SOURCE_LABEL[source]
   const pack = (project?.projectType ?? hit.projectType) === "modpack"
   const chosen = versions.find((item) => item.id === versionId) ?? null
   const target = host.status?.instances.find((item) => item.id === targetId) ?? null
@@ -294,7 +411,7 @@ function ProjectDialog({
     if (loaderFilter !== "all") params.set("loader", loaderFilter)
     void (async () => {
       try {
-        const response = await fetch(`/api/modrinth/project?${params}`, { signal: controller.signal, cache: "no-store" })
+        const response = await fetch(`/api/${source}/project?${params}`, { signal: controller.signal, cache: "no-store" })
         const body = (await response.json()) as { project?: CatalogProject; versions?: CatalogVersion[]; message?: string }
         if (controller.signal.aborted) return
         if (!response.ok || !body.project || !Array.isArray(body.versions)) {
@@ -312,7 +429,7 @@ function ProjectDialog({
       }
     })()
     return () => controller.abort()
-  }, [hit.id, hit.projectType, loaderFilter, versionFilter])
+  }, [hit.id, hit.projectType, loaderFilter, source, versionFilter])
 
   async function showEveryVersion() {
     if (!hit) return
@@ -320,7 +437,7 @@ function ProjectDialog({
     setLoading(true)
     setLoadError(null)
     try {
-      const response = await fetch(`/api/modrinth/project?id=${encodeURIComponent(hit.id)}&all=1`, { cache: "no-store" })
+      const response = await fetch(`/api/${source}/project?id=${encodeURIComponent(hit.id)}&all=1`, { cache: "no-store" })
       const body = (await response.json()) as { versions?: CatalogVersion[]; message?: string }
       if (!response.ok || !Array.isArray(body.versions)) {
         setLoadError(body.message || "Версии не загрузились.")
@@ -342,12 +459,16 @@ function ProjectDialog({
     setInstalling(true)
     setInstallError(null)
     setDoneId(null)
-    setProgress({ label: "Соединяемся с Modrinth", done: 0, total: 0 })
+    setProgress({ label: `Соединяемся с ${sourceName}`, done: 0, total: 0 })
     try {
       const payload = pack
-        ? { kind: "pack", versionId, name: name.trim(), includeOptional }
-        : { kind: "mod", versionId, instanceId: targetId }
-      const response = await fetch("/api/modrinth/install", {
+        ? source === "curseforge"
+          ? { kind: "pack", modId: hit.id, fileId: versionId, name: name.trim(), includeOptional }
+          : { kind: "pack", versionId, name: name.trim(), includeOptional }
+        : source === "curseforge"
+          ? { kind: "mod", modId: hit.id, fileId: versionId, instanceId: targetId }
+          : { kind: "mod", versionId, instanceId: targetId }
+      const response = await fetch(`/api/${source}/install`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
@@ -408,8 +529,8 @@ function ProjectDialog({
               <DialogTitle>{project?.title ?? hit.title}</DialogTitle>
               <DialogDescription>{project?.description || hit.description}</DialogDescription>
             </DialogHeader>
-            <a className="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline" href={modrinthPage(hit.projectType, hit.slug)} target="_blank" rel="noreferrer">
-              Страница на Modrinth
+            <a className="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline" href={source === "curseforge" ? cursePage(hit.projectType, hit.slug) : modrinthPage(hit.projectType, hit.slug)} target="_blank" rel="noreferrer">
+              Страница на {sourceName}
               <ExternalLink className="size-3.5" />
             </a>
             {loading && <p className="text-sm text-[var(--up-muted)]">Читаем версии…</p>}

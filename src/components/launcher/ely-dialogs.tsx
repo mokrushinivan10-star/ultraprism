@@ -58,7 +58,7 @@ export function ElyCreateDialog({ open, onOpenChange }: { open: boolean; onOpenC
         <DialogHeader>
           <DialogTitle>Новая сборка ElyPrism</DialogTitle>
           <DialogDescription>
-            Папка появится в каталоге сборок ElyPrism. Клиент и библиотеки скачает ElyPrism при первом запуске. Сборки Modrinth ставятся из каталога, CurseForge и файл по ссылке — мастером ElyPrism.
+            Папка появится в каталоге сборок ElyPrism. Клиент и библиотеки скачает ElyPrism при первом запуске. Сборки Modrinth и CurseForge ставятся из каталога. Файл по ссылке — мастером ElyPrism.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">

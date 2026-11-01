@@ -143,7 +143,7 @@ export function ElyLibrary({
         <Empty className="mt-8 border">
           <EmptyHeader>
             <EmptyTitle>Сборок пока нет</EmptyTitle>
-            <EmptyDescription>Создайте пустую сборку или поставьте модпак из каталога Modrinth.</EmptyDescription>
+            <EmptyDescription>Создайте пустую сборку или поставьте модпак из каталога Modrinth или CurseForge.</EmptyDescription>
           </EmptyHeader>
           <Button type="button" onClick={onCreate}>
             Новая сборка

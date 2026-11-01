@@ -1,6 +1,15 @@
 export const TIME_ZONE = "Asia/Qyzylorda"
 export const TIME_ZONE_LABEL = "Кызылорда"
 
+export function formatClock(date: Date): string {
+  const time = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
+  return `${time} · ${TIME_ZONE_LABEL}`
+}
+
 export function formatWhen(iso: string | null, empty = "ещё не открывали"): string {
   if (!iso) return empty
   const date = new Date(iso)
