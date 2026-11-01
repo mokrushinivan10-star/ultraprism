@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -177,6 +178,45 @@ describe("elyprism host", () => {
     expect(cleared.instances[0]?.hasIcon).toBe(false)
     await expect(saveInstanceIcon("Тихий берег", Buffer.from("not-an-image"), env)).rejects.toThrow(/PNG/)
     await expect(saveInstanceIcon("../accounts.json", png, env)).rejects.toThrow()
+  })
+
+  it("deletes one instance folder only after the name is confirmed", async () => {
+    const { root, env } = await fixture()
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    )
+    await saveInstanceIcon("Тихий берег", png, env)
+    await fs.mkdir(path.join(root, "icons"), { recursive: true })
+    await fs.writeFile(path.join(root, "icons", "flame.png"), png)
+    await fs.writeFile(path.join(root, "keep.txt"), "stay", "utf8")
+    const refused = await performAction({ action: "delete", instanceId: "Тихий берег", confirmName: "не то имя" }, env, async () => ({ pid: 1 }))
+    expect(refused.ok).toBe(false)
+    expect(await fs.readdir(path.join(root, "instances", "Тихий берег", "minecraft", "saves"))).toContain("Bay")
+    const outside = await performAction({ action: "delete", instanceId: "../keep.txt", confirmName: "keep.txt" }, env, async () => ({ pid: 1 }))
+    expect(outside.ok).toBe(false)
+    expect(await fs.readFile(path.join(root, "keep.txt"), "utf8")).toBe("stay")
+
+    const child = spawn("sleep", ["30"])
+    const started = await performAction({ action: "launch", instanceId: "Тихий берег" }, env, async () => ({ pid: child.pid ?? 0 }))
+    expect(started.ok).toBe(true)
+    try {
+      const busy = await performAction({ action: "delete", instanceId: "Тихий берег", confirmName: "Тихий берег" }, env, async () => ({ pid: 1 }))
+      expect(busy.ok).toBe(false)
+      expect(busy.message).toMatch(/запущена/)
+    } finally {
+      await performAction({ action: "kill", instanceId: "Тихий берег" }, env, async () => ({ pid: 1 }))
+      child.kill()
+    }
+
+    const removed = await performAction({ action: "delete", instanceId: "Тихий берег", confirmName: "Тихий берег" }, env, async () => ({ pid: 1 }))
+    expect(removed.ok).toBe(true)
+    await expect(fs.access(path.join(root, "instances", "Тихий берег"))).rejects.toThrow()
+    expect(await fs.readdir(path.join(root, "icons"))).toEqual(["flame.png"])
+    const groups = await fs.readFile(path.join(root, "instances", "instgroups.json"), "utf8")
+    expect(groups).not.toContain("Тихий берег")
+    expect(await fs.readFile(path.join(root, "keep.txt"), "utf8")).toBe("stay")
+    expect(await fs.readFile(path.join(root, "accounts.json"), "utf8")).toContain("Странник")
   })
 
   it("creates a vanilla instance", async () => {

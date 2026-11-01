@@ -5,12 +5,13 @@ import { useRef, useState } from "react"
 import { ArrowLeft, Copy, FolderOpen, ImagePlus, Square } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useElyHost } from "@/components/launcher/ely-host"
-import { formatWhen } from "@/lib/format"
+import { countLabel, formatWhen } from "@/lib/format"
 import { LOADER_LABEL } from "@/lib/labels"
 import { useLauncher } from "@/lib/launcher-context"
 import type { ElyInstanceDetail } from "@/lib/elyprism-model"
@@ -107,7 +108,7 @@ export function ElyInstanceView({ onPlay, onCatalog }: { onPlay: () => void; onC
         </TabsList>
         <TabsContent value="overview" className="mt-4 grid gap-3">
           <p className="text-sm text-[var(--up-muted)]">
-            Версии, моды, миры, серверы, скриншоты, экспорт и удаление сборки есть на этой странице и в окне ElyPrism. Удаление папки с мирами делает только окно ElyPrism, после подтверждения там.
+            Версии, моды, миры, серверы и скриншоты есть на этой странице. Экспорт по-прежнему открывается окном ElyPrism. Удаление папки сборки — в настройках, после ввода её имени.
           </p>
           <ul className="grid gap-1 text-sm">
             {instance.components.length === 0 && <li className="text-[var(--up-muted)]">Список компонентов пуст.</li>}
@@ -187,8 +188,15 @@ export function ElyInstanceView({ onPlay, onCatalog }: { onPlay: () => void; onC
         <TabsContent value="logs" className="mt-4">
           <Logs instanceId={selectedId} logs={detail?.logs ?? []} />
         </TabsContent>
-        <TabsContent value="settings" className="mt-4">
+        <TabsContent value="settings" className="mt-4 grid gap-6">
           <SettingsForm />
+          <DeleteInstance
+            instanceId={selectedId}
+            name={instance.name}
+            running={running}
+            worlds={detail?.worlds.length ?? 0}
+            onDeleted={() => dispatch({ type: "screen", screen: "library" })}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -513,6 +521,77 @@ function InstancePicture({
         }}
       />
     </div>
+  )
+}
+
+function DeleteInstance({
+  instanceId,
+  name,
+  running,
+  worlds,
+  onDeleted,
+}: {
+  instanceId: string
+  name: string
+  running: boolean
+  worlds: number
+  onDeleted: () => void
+}) {
+  const { busy, run } = useElyHost()
+  const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState("")
+  const matches = typed.trim() === name.trim() && !running
+
+  async function remove() {
+    const result = await run({ action: "delete", instanceId, confirmName: typed.trim() })
+    if (result.ok) {
+      toast.success(result.message)
+      setOpen(false)
+      onDeleted()
+      return
+    }
+    toast.error(result.message)
+  }
+
+  return (
+    <section className="rounded-xl border border-destructive/40 p-4">
+      <h2 className="text-sm font-medium">Удалить сборку</h2>
+      <p className="mt-1 max-w-2xl text-sm text-[var(--up-muted)]">
+        Стирается папка этой сборки: моды, настройки и миры внутри неё.
+        {worlds > 0 ? ` Сейчас в папке ${countLabel(worlds, "мир", "мира", "миров")}.` : " Если в папке saves есть миры, они исчезнут вместе с ней."} Карточки миров в разделе «Миры» не трогаются. Вернуть папку нельзя.
+      </p>
+      <Button type="button" variant="destructive" className="mt-3" disabled={busy} onClick={() => { setTyped(""); setOpen(true) }}>
+        Удалить сборку
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="w-[min(36rem,calc(100%-2rem))]" style={{ maxWidth: "36rem" }}>
+          <DialogHeader>
+            <DialogTitle>Удалить «{name}»?</DialogTitle>
+            <DialogDescription>
+              {running
+                ? "Сборка сейчас запущена. Сначала остановите её."
+                : "Введите имя сборки точно так, как оно написано. После этого папка будет стёрта."}
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            aria-label="Имя сборки для подтверждения"
+            autoComplete="off"
+            value={typed}
+            placeholder={name}
+            disabled={running}
+            onChange={(event) => setTyped(event.target.value)}
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Оставить
+            </Button>
+            <Button type="button" variant="destructive" disabled={!matches || busy} onClick={() => void remove()}>
+              Удалить навсегда
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   )
 }
 

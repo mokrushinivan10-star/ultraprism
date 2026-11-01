@@ -16,7 +16,7 @@ import {
   remoteFromFile,
   type CurseFile,
 } from "@/lib/curseforge"
-import { curseforgeKey, installCursePack, saveCurseforgeKey } from "@/lib/curseforge-install"
+import { curseGet, curseforgeKey, installCursePack, saveCurseforgeKey } from "@/lib/curseforge-install"
 import type { FileDownload } from "@/lib/modrinth-install"
 
 const FAKE_KEY = "curseforge-test-key-0001"
@@ -234,11 +234,26 @@ describe("curseforge catalog", () => {
       expect(text).toContain("Language=ru_RU")
       expect(text).not.toContain("$2a$")
       await expect(curseforgeKey()).resolves.toBe(FAKE_KEY)
+      const realShape = "$2a$10$" + "a".repeat(40)
+      await saveCurseforgeKey(realShape)
+      process.env.CURSEFORGE_API_KEY = FAKE_KEY
+      await expect(curseforgeKey()).resolves.toBe(realShape)
     } finally {
       if (previousDir === undefined) delete process.env.ULTRAPRISM_ELY_DIR
       else process.env.ULTRAPRISM_ELY_DIR = previousDir
       if (previousKey === undefined) delete process.env.CURSEFORGE_API_KEY
       else process.env.CURSEFORGE_API_KEY = previousKey
+    }
+  })
+
+  it("says when CurseForge refuses the saved key", async () => {
+    const original = globalThis.fetch
+    globalThis.fetch = async () => new Response("Forbidden: API Key missing or invalid", { status: 403 })
+    try {
+      await expect(curseGet("/v1/mods/search?gameId=432", "$2a$10$" + "a".repeat(40))).rejects.toThrow(/Заменить ключ/)
+      await expect(curseGet("/v1/mods/search?gameId=432", FAKE_KEY)).rejects.toThrow(/\$2a\$/)
+    } finally {
+      globalThis.fetch = original
     }
   })
 })

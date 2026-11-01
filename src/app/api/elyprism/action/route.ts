@@ -13,6 +13,7 @@ const ACTIONS = new Set<ElyAction["action"]>([
   "copy",
   "folder",
   "kill",
+  "delete",
   "settings",
   "log",
 ])

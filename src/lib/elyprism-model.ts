@@ -140,6 +140,7 @@ export type ElyAction =
   | { action: "copy"; instanceId: string }
   | { action: "folder"; instanceId?: string; which: "data" | "instance" | "game" | "mods" | "saves" | "screenshots" | "logs" }
   | { action: "kill"; instanceId: string }
+  | { action: "delete"; instanceId: string; confirmName: string }
   | { action: "settings"; fields: GlobalPatch }
   | { action: "log"; instanceId: string; file: string }
 

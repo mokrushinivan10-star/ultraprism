@@ -858,6 +858,30 @@ async function readLog(host: ElyHostStatus, instanceId: string, file: string): P
   throw new Error("Журнал не найден.")
 }
 
+async function deleteInstanceFolder(host: ElyHostStatus, instanceId: string, confirmName: string): Promise<string> {
+  if (!host.dataDir) throw new Error(host.message)
+  if (typeof confirmName !== "string" || !confirmName.trim()) throw new Error("Введите имя сборки, чтобы подтвердить удаление.")
+  const id = assertSafeId(instanceId)
+  if (host.runningIds.includes(id)) throw new Error("Сборка запущена. Сначала остановите её, потом удаляйте.")
+  const root = instanceRoot(host.dataDir, id)
+  const info = await fs.lstat(root).catch(() => null)
+  if (!info || info.isSymbolicLink() || !info.isDirectory()) throw new Error("Сборка в папке ElyPrism не найдена.")
+  const cfgPath = path.join(root, "instance.cfg")
+  if (!(await exists(cfgPath))) throw new Error("Сборка в папке ElyPrism не найдена.")
+  const cfg = parseIni(await fs.readFile(cfgPath, "utf8"))
+  const name = cfg.name?.trim() || id
+  if (confirmName.trim() !== name) throw new Error("Имя не совпало, папка сборки осталась на месте.")
+  const iconKey = cfg.iconKey?.trim() || ""
+  try {
+    await fs.rm(root, { recursive: true })
+  } catch {
+    throw new Error("Папка сборки не удалилась. Если игра запущена, закройте её и повторите.")
+  }
+  if (iconKey.startsWith("up-")) await removeOwnedIcons(path.join(host.dataDir, "icons"), iconKey).catch(() => undefined)
+  await writeGroup(path.join(host.dataDir, "instances"), id, "").catch(() => undefined)
+  return name
+}
+
 export async function performAction(action: ElyAction, env: NodeJS.ProcessEnv = process.env, spawnProcess: Spawner = defaultSpawn): Promise<ElyResult> {
   try {
     return await exclusive(async () => {
@@ -884,7 +908,7 @@ export async function performAction(action: ElyAction, env: NodeJS.ProcessEnv = 
         if (!host.instances.some((item) => item.id === action.instanceId)) throw new Error("Сборка в папке ElyPrism не найдена.")
         const args = ["--show", assertSafeId(action.instanceId), "--dir", pathForLauncher(host.dataDir!, exe)]
         await spawnProcess(exe, args)
-        return { ok: true, message: "Открываю окно сборки ElyPrism: версии, моды, миры, серверы, экспорт и удаление." }
+        return { ok: true, message: "Открываю окно сборки ElyPrism: версии, моды, миры, серверы и экспорт." }
       }
       if (action.action === "window") {
         const exe = requireExecutable(host, "window")
@@ -962,6 +986,10 @@ export async function performAction(action: ElyAction, env: NodeJS.ProcessEnv = 
         } catch {
           return { ok: true, message: `Папка: ${dir}` }
         }
+      }
+      if (action.action === "delete") {
+        const removed = await deleteInstanceFolder(host, action.instanceId, action.confirmName)
+        return { ok: true, message: `Сборка «${removed}» удалена вместе с папкой, модами и мирами.` }
       }
       if (action.action === "kill") {
         const id = assertSafeId(action.instanceId)

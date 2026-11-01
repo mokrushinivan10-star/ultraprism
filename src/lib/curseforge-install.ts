@@ -33,14 +33,15 @@ export async function curseforgeConfigured(): Promise<boolean> {
 }
 
 export async function curseforgeKey(): Promise<string> {
+  const host = await inspectHost()
+  if (host.settings.file) {
+    const cfg = parseIni(await fs.readFile(host.settings.file, "utf8"))
+    const stored = cfg.FlameKeyOverride?.trim()
+    if (stored) return assertCurseKey(stored)
+  }
   const fromEnv = process.env.CURSEFORGE_API_KEY?.trim()
   if (fromEnv) return assertCurseKey(fromEnv)
-  const host = await inspectHost()
-  if (!host.settings.file) throw new CatalogError("Сначала укажите ключ CurseForge в каталоге.")
-  const cfg = parseIni(await fs.readFile(host.settings.file, "utf8"))
-  const stored = cfg.FlameKeyOverride?.trim()
-  if (!stored) throw new CatalogError("Сначала укажите ключ CurseForge в каталоге.")
-  return assertCurseKey(stored)
+  throw new CatalogError("Сначала укажите ключ CurseForge в каталоге.")
 }
 
 export async function saveCurseforgeKey(key: string): Promise<void> {
@@ -67,7 +68,20 @@ export async function curseGet(pathname: string, key: string, signal?: AbortSign
     if (signal?.aborted) throw new CatalogError("Установка прервана.")
     throw new CatalogError("CurseForge не ответил. Проверьте интернет.")
   }
-  if (response.status === 401 || response.status === 403) throw new CatalogError("Ключ CurseForge отклонён.")
+  if (response.status === 401 || response.status === 403) {
+    const detail = (await response.text()).replace(/\s+/g, " ").trim().slice(0, 240)
+    if (/API Key missing or invalid/i.test(detail)) {
+      if (!key.startsWith("$2a$")) {
+        throw new CatalogError(
+          "CurseForge не принял ключ: в начале нет $2a$. Знак $ часто пропадает, если ключ попал в PowerShell или в .env без кавычек. Нажмите «Заменить ключ» и вставьте его в поле на этой странице.",
+        )
+      }
+      throw new CatalogError(
+        "CurseForge не принял сохранённый ключ. Нажмите «Заменить ключ» и вставьте действующий ключ с console.curseforge.com. Если ключ там уже меняли, старая запись здесь больше не подойдёт.",
+      )
+    }
+    throw new CatalogError("CurseForge отклонил запрос и не назвал ключ причиной. Повторите поиск чуть позже.")
+  }
   if (response.status === 404) throw new CatalogError("На CurseForge нет такой страницы.")
   if (!response.ok) throw new CatalogError("CurseForge ответил ошибкой.")
   try {
@@ -85,7 +99,7 @@ export async function resolveDownloadUrl(file: CurseFile, key: string, signal?: 
     if (typeof data !== "string" || !data) return null
     return data
   } catch (error) {
-    if (error instanceof CatalogError && error.message === "Ключ CurseForge отклонён.") throw error
+    if (error instanceof CatalogError && /ключ/i.test(error.message)) throw error
     if (error instanceof CatalogError && error.message === "Установка прервана.") throw error
     return null
   }
